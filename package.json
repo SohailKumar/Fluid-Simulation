@@ -5,7 +5,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "parcel src/index.html",
-    "build": "parcel build src/index.html"
+    "build": "parcel build src/index.html --public-url ./",
+    "deploy": "gh-pages -d dist"
   },
   "keywords": [],
   "author": "",
@@ -14,5 +15,8 @@
     "fluid-simulation": "file:",
     "parcel": "^2.12.0",
     "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "gh-pages": "^6.2.0"
   }
 }
