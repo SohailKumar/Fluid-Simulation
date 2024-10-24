@@ -2,16 +2,16 @@
   "name": "fluid-simulation",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-    ,"start": "parcel src/index.html"
-    ,"build": "parcel build src/index.html"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "parcel src/index.html",
+    "build": "parcel build src/index.html"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "fluid-simulation": "file:",
     "parcel": "^2.12.0",
     "three": "^0.169.0"
   }
