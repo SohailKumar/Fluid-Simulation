@@ -1,0 +1,14 @@
+body {
+  margin: 5% 10%;
+}
+
+canvas {
+  width: 100vw;
+  height: 100vh;
+  display: block;
+}
+
+#project-plan {
+  margin: 10% 0 0;
+}
+/*# sourceMappingURL=index.4d663569.css.map */
