@@ -5,13 +5,80 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fluid Simulation Project</title>
+    <link rel="stylesheet" href="styles.css">
     <!-- <link rel="icon" href="/images/favicon.png" type="image/png"> -->
 </head>
 
 <body>
     <canvas id="fluidCanvas"></canvas>
     <script src="./main.js" type="module"></script>
-    <h1>Web-Based Fluid Simulator using WebGL and Three.js</h1>
+    <section id="project-description">
+        <h1>Fluid Simulation</h1>
+        <section id="background-information">
+            <h2>Background Information</h2>
+            <p class="background-text">
+                The Lattice Boltzmann Method (LBM) is a numerical approach used for simulating fluid dynamics. It
+                operates on a discretized lattice grid where each cell holds values for fluid density and velocity
+                distributions. LBM differs from traditional computational fluid dynamics (CFD) methods, as it models the
+                microscopic particle interactions rather than directly solving macroscopic fluid equations. By doing so,
+                LBM is particularly well-suited for simulating complex fluid behavior and is efficiently parallelizable,
+                making it a popular choice for GPU-based simulations.
+            </p>
+        </section>
+
+        <section id="problem-domain">
+            <h2>Problem Domain</h2>
+            <em>To be filled out.</em>
+        </section>
+
+        <section id="algorithm-description">
+            <h2>Algorithm Description</h2>
+            <div class="pseudocode">
+                <h3>Pseudocode</h3>
+                <pre>
+While simulation is running:
+    Collision step (Relaxation)
+    Streaming step (Propagate to neighboring cells)
+    Apply boundary conditions
+    Update macroscopic velocity and density
+    Render the updated fluid field using Three.js
+            </pre>
+            </div>
+
+            <div class="parallelization">
+                <h3>Parallelization</h3>
+                <ul>
+                    <li>
+                        <strong>Use Textures to Represent Fluid State:</strong> WebGL textures store the fluid’s
+                        velocity distribution functions (<em>f<sub>i</sub></em>). Each pixel in the texture represents a
+                        grid cell, with color values (RGBA channels) encoding the fluid state (velocity, density, etc.).
+                    </li>
+                    <li>
+                        <strong>Fragment Shader for Parallel Computation:</strong> The LBM collision and streaming steps
+                        are implemented as a fragment shader. WebGL’s parallel fragment processing allows computation of
+                        the fluid simulation across the entire grid simultaneously.
+                    </li>
+                    <li>
+                        <strong>Render to Textures:</strong> Instead of rendering directly to the screen, simulation
+                        results are rendered to a texture using a framebuffer object. This enables updating the fluid
+                        state for the next time step efficiently.
+                    </li>
+                    <li>
+                        <strong>Use Three.js to Visualize:</strong> After each simulation step, Three.js is used to
+                        visualize the updated fluid state by rendering the texture or particles.
+                    </li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="time-complexity-analysis">
+            <h2>Time Complexity Analysis</h2>
+            <em>To be filled out.</em>
+        </section>
+    </section>
+
+    <section id="project-plan"> </section>
+    <h1>Project Plan</h1>
     <p>We are going to create a web-based fluid simulator using WebGL and Three.js. We plan to implement fluid
         simulation using two different methods, and then we can compare their visual quality, performance, and ease of
         implementation.</p>
