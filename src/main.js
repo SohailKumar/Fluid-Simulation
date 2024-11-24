@@ -1,4 +1,28 @@
+// Import required libraries
 import * as THREE from 'three';
+import * as tf from '@tensorflow/tfjs';
+
+// Simulation parameters
+const Nx = 200; // resolution x-dir
+const Ny = 200; // resolution y-dir
+const rho0 = 100; // average density
+const tau = 1; // collision timescale
+const Nt = 100; // number of timesteps
+
+// Lattice speeds and weights
+const NL = 9;
+const cxs = [0, 0, 1, 1, 1, 0, -1, -1, -1];
+const cys = [0, 1, 1, 0, -1, -1, -1, 0, 1];
+const weights = [4 / 9, 1 / 9, 1 / 36, 1 / 9, 1 / 36, 1 / 9, 1 / 36, 1 / 9, 1 / 36];
+
+// Initialize variables
+let F = tf.randomNormal([Ny, Nx, NL], 1.0, 0.01);
+const cylinder = tf.tidy(() => {
+    const x = tf.range(0, Nx, 1, 'float32');
+    const y = tf.range(0, Ny, 1, 'float32');
+    const [X, Y] = tf.meshgrid(x, y);
+    return X.sub(Nx / 4).square().add(Y.sub(Ny / 2).square()).less(Ny * Ny / 16);
+});
 
 // Define functions to get current render dimensions
 function getRenderWidth() {
@@ -8,99 +32,125 @@ function getRenderWidth() {
 function getRenderHeight() {
     return window.innerHeight / 2; // Adjust based on your needs
 }
-console.log(getRenderWidth(), getRenderHeight());
 
-// Set up scene, camera, and renderer
+// Initialize Three.js Renderer
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, getRenderWidth() / getRenderHeight(), 0.1, 1000);
+const camera = new THREE.OrthographicCamera(0, Nx, 0, Ny, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('fluidCanvas') });
 renderer.setSize(getRenderWidth(), getRenderHeight());
 document.body.prepend(renderer.domElement);
 
-// Create grid dimensions
-const rows = 20; // grid height
-const cols = 40; // grid width
-const marginFactor = .8;
-const dotSize = 2;
+// Add a plane for visualization
+const planeGeometry = new THREE.PlaneGeometry(Nx, Ny);
+const planeMaterial = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
+const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+scene.add(plane);
+camera.position.z = 1;
 
-// Function to create and scale the grid
-function createGrid() {
-    const geometry = new THREE.BufferGeometry(); // Create a new geometry for the points
-    const positions = [];
-    
-    // Calculate spacing based on current render dimensions
-    const spacingX = getRenderWidth() / cols;
-    const spacingY = getRenderHeight() / rows;
+// Simulation main loop
+async function simulate() {
+    for (let it = 0; it < Nt; it++) {
+        // Drift
+        const driftedF = tf.tidy(() => {
+            // Map and process all velocity components
+            const shiftedF = cxs.map((cx, i) => {
+                let f = F.slice([0, 0, i], [Ny, Nx, 1]); // Slice a single component
+                f = tfRoll(f, cx, 1); // Roll along the x-axis
+                f = tfRoll(f, cys[i], 0); // Roll along the y-axis
+                return f.expandDims(2); // Expand dimensions to retain shape
+            });
 
-    for (let i = 0; i < rows; i++) {
-        for (let j = 0; j < cols; j++) {
-            // Calculate position of each point, centering the grid
-            const x = j * spacingX - (cols * spacingX) / 2;
-            const y = i * spacingY - (rows * spacingY) / 2;
-            const z = 0; // Keep points in a flat plane
+            // Concatenate along the last axis to combine all components
+            return tf.concat(shiftedF, 2);
+        });
 
-            // Push point position to the array
-            positions.push(x, y, z);
+
+        // Set reflective boundaries
+        async function computeBoundaryF(driftedF, cylinder) {
+            const boundary = await tf.booleanMaskAsync(driftedF, cylinder);
+            return tf.tidy(() => tf.gather(boundary, [0, 5, 6, 7, 8, 1, 2, 3, 4]));
+        }
+        
+        // Usage:
+        const boundaryF = await computeBoundaryF(driftedF, cylinder);
+
+        // Calculate fluid variables
+        const rho = driftedF.sum(2);
+        const ux = driftedF.mul(cxs).sum(2).div(rho);
+        const uy = driftedF.mul(cys).sum(2).div(rho);
+
+        // Apply Collision
+        const Feq = tf.tidy(() => {
+            return tf.stack(
+                weights.map((w, i) =>
+                    rho.mul(w).mul(
+                        tf.tensor1d([1])
+                            .add(3 * (cxs[i] * ux + cys[i] * uy))
+                            .add(9 / 2 * tf.pow(cxs[i] * ux + cys[i] * uy, 2))
+                            .sub(3 / 2 * (ux.square().add(uy.square())))
+                    )
+                ),
+                2
+            );
+        });
+
+        F = tf.tidy(() => driftedF.add(Feq.sub(driftedF).div(tau)));
+
+            // Apply boundary conditions
+            F = tf.tidy(() => F.where(tf.logicalNot(cylinder), boundaryF));
+
+        // Visualization
+        if (it % 10 === 0 || it === Nt - 1) {
+            visualize(F);
         }
     }
+}
 
-    // Set the position attribute of the geometry
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+function tfRoll(tensor, shift, axis) {
+    const size = tensor.shape[axis]; // Get the size along the specified axis
+    const normalizedShift = ((shift % size) + size) % size; // Handle negative and large shifts
 
-    // Create material for points
-    const material = new THREE.PointsMaterial({ 
-        color: 0x0077ff,
-        size: dotSize,
-        sizeAttenuation: false
+    if (normalizedShift === 0) {
+        return tensor.clone(); // No need to roll if the shift is 0
+    }
+
+    const [start, end] = [
+        tf.slice(tensor, Array(axis).fill(0).concat([0]), Array(axis).fill(-1).concat([size - normalizedShift])),
+        tf.slice(tensor, Array(axis).fill(0).concat([size - normalizedShift]), Array(axis).fill(-1).concat([normalizedShift])),
+    ];
+
+    return tf.concat([end, start], axis);
+}
+
+
+// Visualization using THREE.js
+function visualize(F) {
+    const ux = F.mul(cxs).sum(2).div(F.sum(2));
+    const uy = F.mul(cys).sum(2).div(F.sum(2));
+
+    // Compute vorticity
+    const vorticity = tf.tidy(() => {
+        const dUxDy = ux.slice([1, 0]).sub(ux.slice([0, 0]));
+        const dUyDx = uy.slice([0, 1]).sub(uy.slice([0, 0]));
+        return dUxDy.sub(dUyDx);
     });
 
-    // Create the Points object
-    const points = new THREE.Points(geometry, material);
-    scene.add(points);
-}
+    // Convert to texture
+    const textureData = new Uint8Array(Nx * Ny * 4); // RGBA
+    vorticity.dataSync().forEach((val, idx) => {
+        const color = Math.floor((val + 0.1) * 128); // Scale between 0-255
+        textureData[idx * 4] = color; // R
+        textureData[idx * 4 + 1] = 0; // G
+        textureData[idx * 4 + 2] = 255 - color; // B
+        textureData[idx * 4 + 3] = 255; // A
+    });
 
-// Function to update camera position based on grid size
-function updateCamera() {
-    // Calculate the width and height of the grid based on spacing
-    const gridWidth = getRenderWidth();
-    const gridHeight = getRenderHeight();
+    const texture = new THREE.DataTexture(textureData, Nx, Ny, THREE.RGBAFormat);
+    planeMaterial.map = texture;
+    planeMaterial.needsUpdate = true;
 
-    // Calculate the camera distance based on the grid dimensions and field of view
-    const aspect = camera.aspect; // Aspect ratio
-    const fovInRadians = THREE.MathUtils.degToRad(camera.fov);
-    
-    // Calculate the distance based on the height of the grid and field of view
-    const cameraDistance = (gridHeight / 2) / Math.tan(fovInRadians / 2);
-    
-    // Set camera position and ensure it looks at the center of the grid
-    camera.position.set(0, 0, cameraDistance);
-    camera.lookAt(0, 0, 0);
-}
-// Initial grid creation and camera setup
-createGrid();
-updateCamera();
-
-// Render loop
-function animate() {
-    requestAnimationFrame(animate);
     renderer.render(scene, camera);
 }
-animate();
 
-// Resize handling
-window.addEventListener('resize', () => {
-    renderer.setSize(getRenderWidth(), getRenderHeight());
-    
-    // Update camera aspect ratio
-    camera.aspect = getRenderWidth() / getRenderHeight();
-    camera.updateProjectionMatrix();
-    
-    // Clear the current points from the scene
-    scene.clear(); 
-
-    // Recreate the grid with the new dimensions
-    createGrid();
-    
-    // Update camera to follow the grid
-    updateCamera();
-});
+// Start simulation
+simulate();
