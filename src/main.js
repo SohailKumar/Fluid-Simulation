@@ -141,9 +141,10 @@ function visualize(F, ux, uy) {
         const uy_roll_neg = tfRoll(uy,-1, 1); // Roll in the negative direction along axis 1
 
         // Calculate the vorticity
-        return tf.tidy(() => {ux_roll_neg.sub(ux_roll_pos).sub(uy_roll_neg.sub(uy_roll_pos))});
-
+        return ux_roll_neg.sub(ux_roll_pos).sub(uy_roll_neg.sub(uy_roll_pos));
     });
+
+    console.log("vorticity:", vorticity.toString)
 
     // Convert to texture
     const textureData = new Uint8Array(Nx * Ny * 4); // RGBA
