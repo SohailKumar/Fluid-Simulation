@@ -133,29 +133,40 @@ function visualize(F, ux, uy) {
     console.log(F.shape)
     console.log(ux.shape, uy.shape)
     // Compute vorticity
-    const vorticity = tf.tidy(() => {
-        // Perform the roll operation for ux and uy tensors
-        const ux_roll_pos = tfRoll(ux, 1, 0);  // Roll in the positive direction along axis 0
-        const ux_roll_neg = tfRoll(ux,-1, 0); // Roll in the negative direction along axis 0
-        const uy_roll_pos = tfRoll(uy,1, 1);  // Roll in the positive direction along axis 1
-        const uy_roll_neg = tfRoll(uy,-1, 1); // Roll in the negative direction along axis 1
+    // const vorticity = tf.tidy(() => {
+    //     // Perform the roll operation for ux and uy tensors
+    //     const ux_roll_pos = tfRoll(ux, 1, 0);  // Roll in the positive direction along axis 0
+    //     const ux_roll_neg = tfRoll(ux,-1, 0); // Roll in the negative direction along axis 0
+    //     const uy_roll_pos = tfRoll(uy,1, 1);  // Roll in the positive direction along axis 1
+    //     const uy_roll_neg = tfRoll(uy,-1, 1); // Roll in the negative direction along axis 1
 
-        // Calculate the vorticity
-        return ux_roll_neg.sub(ux_roll_pos).sub(uy_roll_neg.sub(uy_roll_pos));
-    });
+    //     // Calculate the vorticity
+    //     return ux_roll_neg.sub(ux_roll_pos).sub(uy_roll_neg.sub(uy_roll_pos));
+    // });
 
-    console.log("vorticity:", vorticity.toString)
+    // console.log("vorticity:", vorticity.toString)
 
     // Convert to texture
+    
+    // vorticity.dataSync().forEach((val, idx) => {
+    //     const color = Math.floor((val + 0.1) * 128); // Scale between 0-255
+    //     textureData[idx * 4] = color; // R
+    //     textureData[idx * 4 + 1] = 0; // G
+    //     textureData[idx * 4 + 2] = 255 - color; // B
+    //     textureData[idx * 4 + 3] = 255; // A
+    // });
+    const velocityMagnitude = tf.tidy(() => ux.square().add(uy.square()).sqrt());
+    velocityMagnitude.print()
+    // Convert to texture
     const textureData = new Uint8Array(Nx * Ny * 4); // RGBA
-    vorticity.dataSync().forEach((val, idx) => {
-        const color = Math.floor((val + 0.1) * 128); // Scale between 0-255
+    velocityMagnitude.dataSync().forEach((val, idx) => {
+        const color = Math.floor(val * 255); // Scale between 0-255
         textureData[idx * 4] = color; // R
-        textureData[idx * 4 + 1] = 0; // G
-        textureData[idx * 4 + 2] = 255 - color; // B
+        textureData[idx * 4 + 1] = color; // G
+        textureData[idx * 4 + 2] = 255; // B
         textureData[idx * 4 + 3] = 255; // A
     });
-
+    console.log(textureData.toString())
     const texture = new THREE.DataTexture(textureData, Nx, Ny, THREE.RGBAFormat);
     planeMaterial.map = texture;
     planeMaterial.needsUpdate = true;
