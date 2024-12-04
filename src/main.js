@@ -1,156 +1,125 @@
-// Import required libraries
 import * as THREE from 'three';
+import Stats from 'stats.js';
+import GUI from 'lil-gui';
 import * as tf from '@tensorflow/tfjs';
-
-// Simulation parameters
-const Nx = 200; // resolution x-dir
-const Ny = 200; // resolution y-dir
-const rho0 = 100; // average density
-const tau = 1; // collision timescale
-const Nt = 100; // number of timesteps
-
-// Lattice speeds and weights
-const NL = 9;
-const cxs = [0, 0, 1, 1, 1, 0, -1, -1, -1];
-const cys = [0, 1, 1, 0, -1, -1, -1, 0, 1];
-const weights = [4 / 9, 1 / 9, 1 / 36, 1 / 9, 1 / 36, 1 / 9, 1 / 36, 1 / 9, 1 / 36];
-
-// Initialize variables
-let F = tf.randomNormal([Ny, Nx, NL], 1.0, 0.01);
-const cylinder = tf.tidy(() => {
-    const x = tf.range(0, Nx, 1, 'float32');
-    const y = tf.range(0, Ny, 1, 'float32');
-    const [X, Y] = tf.meshgrid(x, y);
-    return X.sub(Nx / 4).square().add(Y.sub(Ny / 2).square()).less(Ny * Ny / 16);
-});
 
 // Define functions to get current render dimensions
 function getRenderWidth() {
-    return window.innerWidth / 2; // Adjust based on your needs
+    return window.innerWidth; // Adjust based on your needs
 }
 
 function getRenderHeight() {
-    return window.innerHeight / 2; // Adjust based on your needs
+    return window.innerHeight; // Adjust based on your needs
 }
+console.log(getRenderWidth(), getRenderHeight());
 
-// Initialize Three.js Renderer
+// Set up scene, camera, and renderer
 const scene = new THREE.Scene();
-const camera = new THREE.OrthographicCamera(0, Nx, 0, Ny, 0.1, 1000);
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1); //vars: left right top bottom near far
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('fluidCanvas') });
 renderer.setSize(getRenderWidth(), getRenderHeight());
+renderer.setClearColor(0xFF9900)
 document.body.prepend(renderer.domElement);
 
-// Add a plane for visualization
-const planeGeometry = new THREE.PlaneGeometry(Nx, Ny);
-const planeMaterial = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
-const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-scene.add(plane);
-camera.position.z = 1;
+//CREATE STATS PAGE
+var stats = new Stats();
+stats.setMode(0);
+stats.domElement.style.position = "absolute";
+stats.domElement.style.left = "5px";
+stats.domElement.style.top = "5px";
+document.body.appendChild(stats.domElement);
 
-// Simulation main loop
-async function simulate() {
-    for (let it = 0; it < Nt; it++) {
-        // Drift
-        const driftedF = tf.tidy(() => {
-            // Map and process all velocity components
-            const shiftedF = cxs.map((cx, i) => {
-                let f = F.slice([0, 0, i], [Ny, Nx, 1]); // Slice a single component
-                f = tfRoll(f, cx, 1); // Roll along the x-axis
-                f = tfRoll(f, cys[i], 0); // Roll along the y-axis
-                return f.expandDims(2); // Expand dimensions to retain shape
-            });
+function thing(){
+    "use strict";
 
-            // Concatenate along the last axis to combine all components
-            return tf.concat(shiftedF, 2);
-        });
-
-
-        // Set reflective boundaries
-        async function computeBoundaryF(driftedF, cylinder) {
-            const boundary = await tf.booleanMaskAsync(driftedF, cylinder);
-            return tf.tidy(() => tf.gather(boundary, [0, 5, 6, 7, 8, 1, 2, 3, 4]));
-        }
-        
-        // Usage:
-        const boundaryF = await computeBoundaryF(driftedF, cylinder);
-
-        // Calculate fluid variables
-        const rho = driftedF.sum(2);
-        const ux = driftedF.mul(cxs).sum(2).div(rho);
-        const uy = driftedF.mul(cys).sum(2).div(rho);
-
-        // Apply Collision
-        const Feq = tf.tidy(() => {
-            return tf.stack(
-                weights.map((w, i) =>
-                    rho.mul(w).mul(
-                        tf.tensor1d([1])
-                            .add(3 * (cxs[i] * ux + cys[i] * uy))
-                            .add(9 / 2 * tf.pow(cxs[i] * ux + cys[i] * uy, 2))
-                            .sub(3 / 2 * (ux.square().add(uy.square())))
-                    )
-                ),
-                2
-            );
-        });
-
-        F = tf.tidy(() => driftedF.add(Feq.sub(driftedF).div(tau)));
-
-            // Apply boundary conditions
-            F = tf.tidy(() => F.where(tf.logicalNot(cylinder), boundaryF));
-
-        // Visualization
-        if (it % 10 === 0 || it === Nt - 1) {
-            visualize(F);
-        }
+    // Placeholder texture data (a simple gradient)
+    const size = 128;
+    const data = new Uint8Array(size * size * 3); // RGB format
+    for (let i = 0; i < size * size; i++) {
+        data[i * 3] = (i % size) * 2;       // Red channel (gradient)
+        data[i * 3 + 1] = (i % size) * 2;   // Green channel (gradient)
+        data[i * 3 + 2] = 255;              // Blue channel (constant)
     }
-}
+    const texture = new THREE.DataTexture(data, size, size, THREE.RGBFormat);
+    texture.needsUpdate = true;
+    // const gridSize = 128;
+    // const data = new Float32Array(gridSize*gridSize*9); //9 so that there are 9 directions
+    // const ftexture = new THREE.DataTexture(data, gridSize, gridSize, THREE.RedFormat, THREE.FloatType);
+    // ftexture.needsUpdate
 
-function tfRoll(tensor, shift, axis) {
-    const size = tensor.shape[axis]; // Get the size along the specified axis
-    const normalizedShift = ((shift % size) + size) % size; // Handle negative and large shifts
-
-    if (normalizedShift === 0) {
-        return tensor.clone(); // No need to roll if the shift is 0
-    }
-
-    const [start, end] = [
-        tf.slice(tensor, Array(axis).fill(0).concat([0]), Array(axis).fill(-1).concat([size - normalizedShift])),
-        tf.slice(tensor, Array(axis).fill(0).concat([size - normalizedShift]), Array(axis).fill(-1).concat([normalizedShift])),
-    ];
-
-    return tf.concat([end, start], axis);
-}
-
-
-// Visualization using THREE.js
-function visualize(F) {
-    const ux = F.mul(cxs).sum(2).div(F.sum(2));
-    const uy = F.mul(cys).sum(2).div(F.sum(2));
-
-    // Compute vorticity
-    const vorticity = tf.tidy(() => {
-        const dUxDy = ux.slice([1, 0]).sub(ux.slice([0, 0]));
-        const dUyDx = uy.slice([0, 1]).sub(uy.slice([0, 0]));
-        return dUxDy.sub(dUyDx);
+    const renderTarget1 = new THREE.WebGLRenderTarget(gridSize, gridSize, {
+        format: THREE.RGBAFormat,
+        type: THREE.FloatType,
     });
+    //render target is a buffer. usually used for applying postprocessing to a rendered image before displaying on screen
 
-    // Convert to texture
-    const textureData = new Uint8Array(Nx * Ny * 4); // RGBA
-    vorticity.dataSync().forEach((val, idx) => {
-        const color = Math.floor((val + 0.1) * 128); // Scale between 0-255
-        textureData[idx * 4] = color; // R
-        textureData[idx * 4 + 1] = 0; // G
-        textureData[idx * 4 + 2] = 255 - color; // B
-        textureData[idx * 4 + 3] = 255; // A
-    });
+    const renderTarget2 = renderTarget1.clone();//cloning to write to a new one and only reading the old one.
 
-    const texture = new THREE.DataTexture(textureData, Nx, Ny, THREE.RGBAFormat);
-    planeMaterial.map = texture;
-    planeMaterial.needsUpdate = true;
+    const material = new THREE.MeshBasicMaterial({map: texture}) //use the texture and map it onto the material
+    // const streamMaterial = new THREE.ShaderMaterial({
+    //     uniforms: {
+    //         f_i: { value: fTexture },
+    //         gridSize: { value: new THREE.Vector2(gridSize, gridSize) },
+    //     },
+    //     vertexShader: /* GLSL vertex shader */,
+    //     fragmentShader: `
+    //         precision highp float;
+    //         uniform sampler2D f_i;
+    //         uniform vec2 gridSize;
+    
+    //         void main() {
+    //             vec2 coord = gl_FragCoord.xy / gridSize;
+    //             vec4 f = texture2D(f_i, coord);
+    //             // Compute streaming logic
+    //             gl_FragColor = result;
+    //         }
+    //     `,
+    // });
 
-    renderer.render(scene, camera);
+    // const quad = new THREE.PlaneBufferGeometry(2 * (grid.size.x - 2) / grid.size.x, 2 * (grid.size.y - 2) / grid.size.y);
+    const geometry = new THREE.PlaneGeometry(2, 2) // fill screen
+
+    const mesh = new THREE.Mesh(geometry, material);
+    scene.add(mesh);
+
 }
 
-// Start simulation
-simulate();
+
+// function createBase(fragmentShader, uniforms, grid){
+//     "use strict";
+//     var geometry = new THREE.PlaneBufferGeometry(2 * (grid.size.x - 2) / grid.size.x, 2 * (grid.size.y - 2) / grid.size.y);
+//     var material = new THREE.ShaderMaterial({
+//         uniforms: uniforms,
+//         fragmentShader: fs,
+//         depthWrite: false,
+//         depthTest: false,
+//         blending: THREE.NoBlending
+//     });
+//     var quad = new THREE.Mesh(geometry, material);
+    
+//     scene.add(quad)
+
+// }
+
+// function createGrid(){
+//     var grid = {
+//         size: new THREE.Vector2(512, 256),
+//         scale: 1,
+//         applyBoundaries: true  
+//     };
+// }
+
+
+// Render loop
+function animate() {
+    renderer.render(scene, camera); // Render the current frame
+}
+renderer.setAnimationLoop(animate); // Automatically calls animate in a loop
+//
+//DOES THE SAME THING BUT EXPLICITLY
+// function animate() {
+//     requestAnimationFrame(animate); //schedules the next animation
+//     renderer.render(scene, camera);
+// }
+// animate(); //calling the first animate
+///////////////////////////////////////////
