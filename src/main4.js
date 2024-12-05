@@ -27,16 +27,7 @@ renderer.setSize(getRenderWidth(), getRenderHeight());
 renderer.setClearColor(0xFF9900)
 document.body.prepend(renderer.domElement);
 
-async function loadShader(path) {
-    return (await fetch(path)).text();
-};
 
-async function logShaderContent() {
-    const shaderText = await loadShader('/shaders/vertexShader.glsl');
-    console.log(shaderText);
-}
-
-logShaderContent();
 // Render loop
 function animate() {
     stats.begin();
@@ -44,26 +35,38 @@ function animate() {
     stats.end(); // End measuring frame
 }
 
-// async function init(){  
-//     // const vertexShader = loadShader('/shaders/vertexShader.glsl');
-//     // const fragmentShader = loadShader('/shaders/fragmentShader.glsl');    
+function init(){  
+    // const vertexShader = loadShader('/shaders/vertexShader.glsl');
+    // const fragmentShader = loadShader('/shaders/fragmentShader.glsl');    
 
-//     const mesh = new THREE.Mesh(
-//         new THREE.PlaneGeometry(2,2),
-//         new THREE.ShaderMaterial( {
-//             uniforms: {
-//                 time: { value: 1.0 },
-//                 resolution: { value: new THREE.Vector2() }
-//             },
-        
-//             vertexShader: vertexShader,
-//             fragmentShader: fragmentShader
-        
-//         } )
-//     )
-//     scene.add( mesh );
+    const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(2, 2),
+        new THREE.ShaderMaterial({
+            uniforms: {
+                time: { value: 1.0 },
+                resolution: { value: new THREE.Vector2() }
+            },
+            vertexShader: `
+                varying vec2 texCoord;
 
-//     renderer.setAnimationLoop(animate);// Automatically calls animate in a loop
-// }
+                void main()
+                {
+                    texCoord = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                varying vec2 texCoord;
+    
+                void main() {
+                    gl_FragColor = vec4(texCoord.x, texCoord.y, 1.0, 1.0);
+                }
+            `
+        })
+    );
+    scene.add( mesh );
 
-// init();
+    renderer.setAnimationLoop(animate);// Automatically calls animate in a loop
+}
+
+init();
