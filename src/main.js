@@ -21,6 +21,9 @@ renderer.setSize(getRenderWidth(), getRenderHeight());
 renderer.setClearColor(0xFF9900)
 document.body.prepend(renderer.domElement);
 
+const gl = renderer.getContext();
+console.log(gl.getError());
+
 //CREATE STATS PAGE
 var stats = new Stats();
 stats.setMode(0);
@@ -28,34 +31,38 @@ stats.domElement.style.position = "absolute";
 stats.domElement.style.left = "5px";
 stats.domElement.style.top = "5px";
 document.body.appendChild(stats.domElement);
-
 function thing(){
     "use strict";
 
     // Placeholder texture data (a simple gradient)
     const size = 128;
-    const data = new Uint8Array(size * size * 3); // RGB format
+    const data = new Uint8Array(size * size * 3); // RGB format (3 channels)
+
+    // Fill the array with gradient data
     for (let i = 0; i < size * size; i++) {
         data[i * 3] = (i % size) * 2;       // Red channel (gradient)
         data[i * 3 + 1] = (i % size) * 2;   // Green channel (gradient)
         data[i * 3 + 2] = 255;              // Blue channel (constant)
     }
-    const texture = new THREE.DataTexture(data, size, size, THREE.RGBFormat);
+
+    // Create DataTexture
+    const texture = new THREE.DataTexture(
+        data,                 // Texture data
+        size,                 // Width
+        size,                 // Height
+        THREE.RGBFormat,      // Format (RGB, 3 channels)
+        THREE.UnsignedByteType // Type (Uint8Array data)
+    );
+
+    // Disable mipmapping and set filters
+    texture.minFilter = THREE.NearestFilter;
+    texture.magFilter = THREE.NearestFilter;
+    texture.generateMipmaps = false;
     texture.needsUpdate = true;
-    // const gridSize = 128;
-    // const data = new Float32Array(gridSize*gridSize*9); //9 so that there are 9 directions
-    // const ftexture = new THREE.DataTexture(data, gridSize, gridSize, THREE.RedFormat, THREE.FloatType);
-    // ftexture.needsUpdate
 
-    const renderTarget1 = new THREE.WebGLRenderTarget(gridSize, gridSize, {
-        format: THREE.RGBAFormat,
-        type: THREE.FloatType,
-    });
-    //render target is a buffer. usually used for applying postprocessing to a rendered image before displaying on screen
-
-    const renderTarget2 = renderTarget1.clone();//cloning to write to a new one and only reading the old one.
-
-    const material = new THREE.MeshBasicMaterial({map: texture}) //use the texture and map it onto the material
+    // Use the texture in the material
+    const material = new THREE.MeshBasicMaterial({ map: texture });
+    
     // const streamMaterial = new THREE.ShaderMaterial({
     //     uniforms: {
     //         f_i: { value: fTexture },
@@ -84,6 +91,7 @@ function thing(){
 
 }
 
+thing()
 
 // function createBase(fragmentShader, uniforms, grid){
 //     "use strict";
