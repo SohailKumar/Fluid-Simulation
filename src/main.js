@@ -2,9 +2,12 @@
 import * as THREE from 'three';
 import * as tf from '@tensorflow/tfjs';
 
+//DEBUG FLAG
+const debug = false;
+
 // Simulation parameters
-const Nx = 3; // resolution x-dir
-const Ny = 3; // resolution y-dir
+const Nx = 50; // resolution x-dir
+const Ny = 50; // resolution y-dir
 const rho0 = 100; // average density
 const tau = 0.6; // collision timescale
 const Nt = 50; // number of timesteps
@@ -57,7 +60,7 @@ startButton.addEventListener('click', () => {
     isPaused = false;
     startButton.disabled = true
     pauseButton.disabled = false
-    console.log(isPaused)
+    if (debug) console.log("paused", isPaused)
     simulate()
 });
 
@@ -75,21 +78,23 @@ pauseButton.addEventListener('click', () => {
 
 // Initialize Three.js Renderer
 const scene = new THREE.Scene();
-const camera = new THREE.OrthographicCamera(0, Nx, 0, Ny, 0.1, 1000);
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -10, 10);
+
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('fluidCanvas') });
 renderer.setSize(getRenderWidth(), getRenderHeight());
+renderer.setClearColor(0x808080)
 document.body.prepend(renderer.domElement);
 
 // Add a plane for visualization
 let textureData = new Uint8Array(Nx * Ny * 4); // RGBA
+if (debug) console.log(textureData)
 let texture = new THREE.DataTexture(textureData, Nx, Ny, THREE.RGBAFormat)
 texture.needsUpdate = true
-const planeGeometry = new THREE.PlaneGeometry(Nx, Ny);
+const planeGeometry = new THREE.PlaneGeometry(2,2);
 const planeMaterial = new THREE.MeshBasicMaterial({ map: texture });
 const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-scene.background = new THREE.Color(0x808080); // Set background to gray
+// scene.background = new THREE.Color(0x808080); // Set background to gray
 scene.add(plane);
-camera.position.z = 1;
 renderer.render(scene, camera);
 
 
@@ -112,7 +117,7 @@ function tfRoll(tensor, shift, axis) {
 
 
 function initialize_sim() {
-    console.log("F before init: ", F.toString())
+    if (debug) console.log("F before init: ", F.toString())
     // Assuming TensorFlow.js tensors and Nx, rho0, and idxs are predefined
     F = tf.tidy(() => {
         // Update F[:,:,3]
@@ -120,16 +125,16 @@ function initialize_sim() {
         const XScaled = tf.scalar((2 * Math.PI)).mul(X).div(tf.scalar(Nx)).mul(4); // Scale X
         const cosineTerm = tf.cos(XScaled).mul(tf.scalar(0.2)).add(tf.scalar(1)); // 1 + 0.2 * cos(...)
         const addition = cosineTerm.mul(2).expandDims(1); // 2 * (1 + 0.2 * cos(...))
-        console.log("addition", addition.toString())
+        if (debug) console.log("addition", addition.toString())
         const updatedF = tf.add(tf.slice(F, [0, 0, 3], [-1, -1, 1]), addition);
-        console.log(updatedF.toString())
+        if (debug) console.log(updatedF.toString())
         F = tf.concat(
             [tf.slice(F, [0, 0, 0], [-1, -1, 3])
             , updatedF
             , tf.slice(F, [0, 0, 4], [-1, -1, -1])],
             2
         );
-        console.log(F.toString())
+        if (debug) console.log(F.toString())
 
         
         F = tf.tidy(() => {
@@ -143,12 +148,20 @@ function initialize_sim() {
         
         return F;
     });
-    console.log("F init:", F.toString())
+
+    const rho = tf.tidy(() => { return F.sum(2) });
+    const ux = tf.tidy(() => { return F.mul(cxs).sum(2).div(rho) });
+    const uy = tf.tidy(() => { return F.mul(cys).sum(2).div(rho) });
+    const normalizedVelocity = getNormalizedVel(ux, uy)
+    visualize(normalizedVelocity)
+
+    if (debug) console.log("F init:", F.toString())
 }
 
 
-
-const SIMULATION_INTERVAL = 500
+// texture updates every SIMINTRV * VISINTRV milliseconds
+const SIMULATION_INTERVAL = 100 //milliseconds. 
+const VISUALIZATION_INTERVAL = 10 // update texture every 10 iterations
 let step = 0
 
 // Simulation main loop
@@ -162,7 +175,8 @@ async function simulate() {
     }, SIMULATION_INTERVAL); // Update every second
 }
 
-const VISUALIZATION_INTERVAL = 10 // update texture every 10 iterations
+
+
 
 function updateSimulation(step) {
     // Drift
@@ -212,28 +226,33 @@ function updateSimulation(step) {
     // console.log("feq", Feq.toString())
     // console.log("F precol:", F.toString())
     F = tf.tidy(() => { return F.add(F.sub(Feq).mul(-1.0 / tau)) });
-    console.log("F postcol:", F.toString())
+    if (debug) console.log("F postcol:", F.toString())
     // Apply boundary conditions
     // F = tf.tidy(() => tf.where(tf.logicalNot(cylinder), F, boundaryF.expandDims(-1)));
 
     // Visualization
     if (step % VISUALIZATION_INTERVAL === 0) {
-        // visualize(F, ux, uy);
-        const velocityMagnitude = tf.tidy(() => ux.square().add(uy.square()).sqrt());
-        // console.log("velocs: ", velocityMagnitude.toString())
-        const normalizedVelocity = tf.tidy(() => {
-            const min = velocityMagnitude.min();
-            const max = velocityMagnitude.max();
-            // console.log(min.toString(), max.toString())
-            return tf.where(
-                min.equal(max),
-                tf.zerosLike(velocityMagnitude), // All zeros if min == max
-                velocityMagnitude.sub(min).div(max.sub(min)) // Normalize
-            );
-        });
-
+        
+        const normalizedVelocity = getNormalizedVel(ux, uy)
         visualize(normalizedVelocity)
     }
+}
+
+function getNormalizedVel(ux, uy) {
+    const velocityMagnitude = tf.tidy(() => ux.square().add(uy.square()).sqrt());
+        // console.log("velocs: ", velocityMagnitude.toString())
+    const normalizedVelocity = tf.tidy(() => {
+        const min = velocityMagnitude.min();
+        const max = velocityMagnitude.max();
+        // console.log(min.toString(), max.toString())
+        return tf.where(
+            min.equal(max),
+            tf.zerosLike(velocityMagnitude), // All zeros if min == max
+            velocityMagnitude.sub(min).div(max.sub(min)) // Normalize
+        );
+    });
+
+    return normalizedVelocity
 }
 
 // Visualization using THREE.js
@@ -242,7 +261,7 @@ function visualize(normalizedVelocity) {
 
     let needsUpdate = false;
     const velArray = normalizedVelocity.dataSync()
-    console.log("normzed vel: ", velArray)
+    if (debug) console.log("normzed vel: ", velArray)
     for (let i = 0; i < Nx; i++) {
         for (let j = 0; j < Ny; j++) {
             const idx = (i * Ny + j) * 4;
@@ -257,7 +276,7 @@ function visualize(normalizedVelocity) {
             }
         }
     }
-    console.log(textureData)
+    if (debug) console.log(textureData)
     if (needsUpdate) {
         texture.needsUpdate = true;
         renderer.render(scene, camera);
@@ -269,3 +288,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initialize_sim()
 });
 
+// Resize handling
+window.addEventListener('resize', () => {
+    renderer.setSize(getRenderWidth(), getRenderHeight());
+    renderer.render(scene, camera);
+});
