@@ -29,32 +29,42 @@ renderer.setClearColor(0xFF9900)
 document.body.prepend(renderer.domElement);
 
 // const geometry = new THREE.BoxGeometry( 1, 1, 1 );
-const geometry = new THREE.PlaneGeometry(2,     2)
+// const geometry = new THREE.PlaneGeometry(2, 2)
 
 const width = 10, height = 10   ;
 const size = width * height;
 const data = new Uint8Array( 4 * size );
+
+forPix = function(color, x, y, i){
+    let v = Math.floor( THREE.MathUtils.seededRandom() * 255 );
+    color.r = v;
+    color.g = v;
+    color.b = v;
+    return color;
+};
+
 for ( let i = 0; i < size; i ++ ) {
-    const stride = i * 4,
+    let stride = i * 4,
     x = i % width,
     y = Math.floor(i / width),
-    v2 = new THREE.Vector2(x, y),
-    d = v2.distanceTo( new THREE.Vector2(width / 2, height / 2) ),
-    iPer = i / size;
-    let dPer = d / (width / 2);
-    dPer = dPer > 1 ? 1 : dPer;
-    // set r, g, b, and alpha data values
-    data[ stride ] = 255 - Math.floor(255 * dPer);
-    data[ stride + 1 ] = Math.floor(64 * iPer);
-    data[ stride + 2 ] = 64 - Math.floor(64 * iPer);
+    color = forPix( new THREE.Color(), x, y, i);
+    data[ stride ] = color.r;
+    data[ stride + 1 ] = color.g;
+    data[ stride + 2 ] = color.b;
     data[ stride + 3 ] = 255;
 }
 const texture = new THREE.DataTexture( data, width, height );
 texture.needsUpdate = true;
 
-const material = new THREE.MeshBasicMaterial( { map: texture, side: THREE.FrontSide } );
-const plane = new THREE.Mesh( geometry, material );
-scene.add( plane );
+// const mesh = new THREE.Mesh
+const material = new THREE.MeshBasicMaterial( { map: texture} );
+// const plane = new THREE.Mesh( geometry, material );
+
+const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(2,2),
+    new THREE.MeshBasicMaterial( { map: texture } )
+)
+scene.add( mesh );
 
 // Render loop
 function animate() {
