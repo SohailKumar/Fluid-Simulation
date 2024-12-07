@@ -66,7 +66,19 @@ const material = new THREE.MeshBasicMaterial( { map: texture} );
 
 const mesh = new THREE.Mesh(
     new THREE.PlaneGeometry(2,2),
-    new THREE.MeshBasicMaterial( { map: texture } )
+    // new THREE.MeshBasicMaterial( { map: texture } )
+    new THREE.ShaderMaterial({
+        vertexShader: `varying vec2 vUv;
+
+void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`,
+        fragmentShader: `varying vec2 vUv;
+void main() {
+    gl_FragColor = vec4(vUv.x, vUv.y, 1.0, 1.0);
+}`
+    })
 )
 scene.add( mesh );
 
