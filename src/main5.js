@@ -28,12 +28,12 @@ function getRenderHeight() {
     return window.innerHeight; // Adjust based on your needs
 }
 
-//////////////
-/// CHANGEABLE
-//////////////
+////////////////////////
+/// global params
+////////////////////////
 const geoWidth = 2;
 const geoHeight = 2;
-const resolution = 512; // Adjust resolution as needed
+const resolution = 128; // Adjust resolution as needed
 
 const params = {
     isSimRunning: true,
@@ -49,9 +49,9 @@ gui.add( params, 'isSimRunning' );
 gui.add( params, 'step' );
 gui.open();
 
-////////////
-/// Set up scene, camera, and renderer
-////////////
+////////////////////////
+/// Set up scene(main and buffer), camera, and renderer
+////////////////////////
 var camera;
 var renderer;
 var geo;
@@ -61,7 +61,7 @@ var displayMaterial;
 var displayMesh;
 
 var bufferScene;
-var bufferMaterial;
+// var bufferMaterial;
 var bufferMesh;
 
 var rt1;
@@ -77,7 +77,7 @@ function createInitialTexture() {
 
     // Fill the texture with a simple color (e.g., red)
     for (let i = 0; i < width * height; i++) {
-        data[i * 4 + 0] = 1.0;  // Red channel
+        data[i * 4 + 0] = i/(width*height);  // Red channel
         data[i * 4 + 1] = 0.0;  // Green channel
         data[i * 4 + 2] = 0.0;  // Blue channel
         data[i * 4 + 3] = 1.0;  // Alpha channel (opaque)
@@ -132,9 +132,26 @@ function setupScene() {
 }
 setupScene();
 
+////////////////////////
+/// Set up shaders
+////////////////////////
 
 // var vertexShader;
 var shadersDict = {};
+
+function simulateSingleShader(name){
+    //run shader
+    let shader = shadersDict[name]
+    bufferMesh.material = shadersDict[name]; // here is where we dynamically assign the material
+    shader.uniforms.uTexture.value = currentRT.texture;
+
+    //render to buffer scene
+    renderer.setRenderTarget(nextRT);
+    renderer.render(bufferScene, camera);
+
+    //swap buffers
+    [currentRT, nextRT] = [nextRT, currentRT];
+}
 
 function setupShaders(){
     const shaderMultiply = new THREE.ShaderMaterial({
@@ -144,7 +161,7 @@ function setupShaders(){
         fragmentShader: `uniform sampler2D uTexture;
 
 void main() {
-    vec4 color = texture2D(uTexture, gl_FragCoord.xy / vec2(512.0, 512.0));
+    vec4 color = texture2D(uTexture, gl_FragCoord.xy / vec2(128, 128));
     gl_FragColor = color * vec4(0.5, 1.0, 0.5, 1.0); // Multiply color by greenish color
 }`
     });
@@ -157,7 +174,7 @@ void main() {
         fragmentShader: `uniform sampler2D uTexture;
 
 void main() {
-    vec4 color = texture2D(uTexture, gl_FragCoord.xy / vec2(512.0, 512.0));  // assuming 512x512 texture resolution
+    vec4 color = texture2D(uTexture, gl_FragCoord.xy / vec2(128, 128));  // assuming 512x512 texture resolution
     gl_FragColor = vec4(1.0 - color.rgb, 1.0);  // Invert the color
 }`
     });
@@ -185,21 +202,6 @@ void main() {
     // shadersDict["streamingShader"] = streamingShader;
 }
 setupShaders();
-
-
-function simulateSingleShader(name){
-    //run shader
-    let shader = shadersDict[name]
-    bufferMesh.material = shadersDict[name]; // here is where we dynamically assign the material
-    shader.uniforms.uTexture.value = currentRT.texture;
-
-    //render to buffer scene
-    renderer.setRenderTarget(nextRT);
-    renderer.render(bufferScene, camera);
-
-    //swap buffers
-    [currentRT, nextRT] = [nextRT, currentRT];
-}
 
 function simulateAll(){
     simulateSingleShader("shaderMultiply");
