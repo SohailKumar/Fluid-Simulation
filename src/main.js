@@ -5,9 +5,12 @@ import * as tf from '@tensorflow/tfjs';
 //DEBUG FLAG
 const debug = false;
 
+const initial_noise_flag = true
+
 // texture updates every SIMINTRV * VISINTRV / 1000 seconds
+// 1000 / SIMINTRV * VISINTRV  updates every second
 let SIMULATION_INTERVAL = 100 //milliseconds. 10 iterations per second
-let VISUALIZATION_INTERVAL = 2 // update texture every 2 iterations. 5 per second
+let VISUALIZATION_INTERVAL = 2 // update texture every 5 iterations. 2 per second
 // let VISUALIZATION_MODE = "vorticity"
 let VISUALIZATION_MODE = "velocity"
 let step = 0
@@ -15,8 +18,8 @@ let step = 0
 const Nx = 100; // resolution x-dir
 const Ny = 100; // resolution y-dir
 const rho0 = 100; // average density
-const tau = 1.1; // collision timescale
-const Nt = 300; // number of timesteps. simulation will take Nt * SIM_INT / 1000 seconds
+const tau = 1.8; // collision timescale
+const Nt = 1000; // number of timesteps. simulation will take Nt * SIM_INT / 1000 seconds
 
 const randSeed = 123
 
@@ -29,25 +32,39 @@ const weights = [4 / 9, 1 / 9, 1 / 36, 1 / 9, 1 / 36, 1 / 9, 1 / 36, 1 / 9, 1 / 
 
 // Initialize simulation variables
 // console.log("inits:",ones.toString(), rand.toString())
-let F = tf.tidy(() => {
-    const ones = tf.ones([Ny, Nx, NL])
-    const rand = tf.randomNormal([Ny, Nx, NL], 0, 0.01, 'float32', randSeed)
-    return ones.add(rand)
-});
+let F = resetF()
+
+function resetF() {
+    return tf.tidy(() => { return tf.ones([Ny, Nx, NL]).add(tf.randomNormal([Ny, Nx, NL], 0, 0.01, 'float32', randSeed)) });
+}
 
 // create collisions
-let cylinderMask = tf.ones([Ny, Nx])
-let cylinderMaskArr = cylinderMask.dataSync()
+let objectMask = tf.zeros([Ny, Nx])
+let objectMaskArr = objectMask.dataSync()
 const grayValue = 128; // Gray level for R, G, B
 const alphaValue = 255; // Full opacity
 
+// initialize visualization array
+let visualArr = Array.from({ length: Ny }, () => Array(Nx).fill(0));
+
 // Define functions to get current render dimensions
 function getRenderWidth() {
+
     return window.innerWidth / 2; // Adjust based on your needs
 }
 
 function getRenderHeight() {
+
     return window.innerHeight / 2; // Adjust based on your needs
+}
+
+function setCanvSizes() {
+    canvContainer.style.width = getRenderHeight() + 'px'; // Set the width in pixels
+    canvContainer.style.height = getRenderHeight() + 'px'; // Set the height in pixels
+    simCanvas.height = getRenderHeight()
+    simCanvas.width = getRenderHeight()
+    UICanvas.height = getRenderHeight()
+    UICanvas.width = getRenderHeight()
 }
 
 
@@ -55,56 +72,186 @@ const startButton = document.getElementById('startButton');
 const pauseButton = document.getElementById('pauseButton');
 const resetButton = document.getElementById('resetButton');
 const advanceButton = document.getElementById('advanceButton');
+const addCircleButton = document.getElementById('addCircleButton');
+let isAddingCircle = false;
+let circleCenter = null;
+let overlayCenter = null;
+const instructionBox = document.getElementById('instructionBox');
+
+
+const canvContainer = document.getElementById('canvasContainer')
+const simCanvas = document.getElementById('fluidCanvas')
+const UICanvas = document.getElementById('UICanvas')
+
+
+const ctx = UICanvas.getContext('2d');
+console.log(ctx)
+
 let intervalId = -1
 
 let isPaused = true;
 
 startButton.addEventListener('click', () => {
+    start()
+});
+function start() {
     isPaused = false;
     startButton.disabled = true
     pauseButton.disabled = false
     if (debug) console.log("paused", isPaused)
     simulate(Nt)
-});
+}
 
 pauseButton.addEventListener('click', () => {
+    pause()
+});
+
+function pause() {
     isPaused = true;
     clearInterval(intervalId)
     pauseButton.disabled = true
     startButton.disabled = false
-
-});
+}
 
 resetButton.addEventListener('click', () => {
+    reset()
+});
+function reset() {
     clearInterval(intervalId)
     step = 0
     isPaused = true
     pauseButton.disabled = true
     startButton.disabled = false
-    F = tf.tidy(() => {
-        const ones = tf.ones([Ny, Nx, NL])
-        const rand = tf.randomNormal([Ny, Nx, NL], 0, 0.01, 'float32', randSeed)
-        return ones.add(rand)
-    });
+    F.dispose()
+    objectMask.dispose()
+    F = resetF()
+    objectMask = tf.zeros([Ny, Nx])
+    objectMaskArr = objectMask.arraySync()
     initialize_sim()
-});
+    renderer.render(scene, camera);
+}
 
 advanceButton.addEventListener('click', async () => {
+    await advance()
+});
+async function advance() {
     const tempInt = VISUALIZATION_INTERVAL
     VISUALIZATION_INTERVAL = 1
     step += 1
     await updateSimulation(step);
     VISUALIZATION_INTERVAL = tempInt
+}
+
+addCircleButton.addEventListener('click', () => {
+    addCircleMode()
+
 });
+function addCircleMode() {
+    if (isAddingCircle) {
+        UICanvas.removeEventListener('mousemove', circleOverlay)
+        ctx.clearRect(0, 0, UICanvas.width, UICanvas.height);
+    }
+    isAddingCircle = !isAddingCircle;
+    circleCenter = null;
+    instructionBox.hidden = !instructionBox.hidden
+    updateInstructions("Click in the simulation box to define the center of the circle.");
+}
+
+UICanvas.addEventListener('click', (event) => {
+    drawCircle(event)
+})
+function drawCircle(event) {
+    if (!isAddingCircle) return;
+
+    const canvasRect = UICanvas.getBoundingClientRect();
+    const mouseX = event.clientX - canvasRect.left;
+    const mouseY = event.clientY - canvasRect.top;
+
+    // Convert mouse coordinates to simulation coordinates
+    const simX = Math.floor((mouseX / canvasRect.width) * Nx);
+    const simY = Ny - Math.floor((mouseY / canvasRect.height) * Ny);
+
+    if (!circleCenter) {
+        // First click: define center
+        circleCenter = { x: simX, y: simY };
+        overlayCenter = { x: mouseX, y: mouseY };
+        UICanvas.addEventListener('mousemove', circleOverlay)
+        updateInstructions("Click again to set the radius.")
+        console.log(`Circle center set at (${simX}, ${simY}). Click again to set the radius.`);
+    } else {
+        // Second click: define radius
+        const dx = simX - circleCenter.x;
+        const dy = simY - circleCenter.y;
+        const radius = Math.sqrt(dx * dx + dy * dy);
+
+        console.log(`Circle radius set to ${radius}. Adding circle to the mask.`);
+        const cyl = createCylinderMask(circleCenter.x, circleCenter.y, radius);
+        collisonAddObject(cyl)
+        cyl.dispose()
+        // Reset adding mode
+        isAddingCircle = false;
+        circleCenter = null;
+        overlayCenter = null;
+        instructionBox.hidden = true
+        UICanvas.removeEventListener('mousemove', circleOverlay)
+        ctx.clearRect(0, 0, UICanvas.width, UICanvas.height);
+        visualize()
+    }
+
+}
+// Function to update the instruction box
+function updateInstructions(message) {
+    instructionBox.textContent = message; // Update the text content
+}
+
+const circleOverlay = (event) => {
+    if (!isAddingCircle) return;
+
+    const canvasRect = UICanvas.getBoundingClientRect();
+    const mouseX = event.clientX - canvasRect.left;
+    const mouseY = event.clientY - canvasRect.top;
+
+    // Convert mouse coordinates to simulation coordinates
+    const simX = Math.floor((mouseX / canvasRect.width) * Nx);
+    const simY = Ny - Math.floor((mouseY / canvasRect.height) * Ny);
+
+    const dx = mouseX - overlayCenter.x;
+    const dy = mouseY - overlayCenter.y;
+    const radius = Math.sqrt(dx * dx + dy * dy);
+    
+    
+    // Clear the canvas and draw the circle
+    ctx.clearRect(0, 0, UICanvas.width, UICanvas.height);
+    drawTranslucentCircle(overlayCenter.x, overlayCenter.y, radius);
+}
+function drawTranslucentCircle(x, y, radius) {
+    // console.log(`Circle overlay set at (${x}, ${y}) with radius ${radius}. Click again to set the radius.`);
+    ctx.fillStyle = 'rgba(128, 128, 128, 0.3)'; // Translucent blue fill
+    ctx.strokeStyle = 'rgba(128, 128, 128, 0.7)'; // Semi-translucent blue border
+    ctx.lineWidth = 2;
+
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.closePath();
+
+    ctx.fill();
+    ctx.stroke();
+}
+
+
+// RENDERER INITIALIZATION
 
 // Initialize Three.js Renderer
 const scene = new THREE.Scene();
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -10, 10);
 
-const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('fluidCanvas') });
-renderer.setSize(getRenderWidth(), getRenderHeight());
+const renderer = new THREE.WebGLRenderer({ canvas: simCanvas });
+renderer.setSize(getRenderHeight(), getRenderHeight());
+UICanvas.width = renderer.width
+UICanvas.height = renderer.height
+
 renderer.setClearColor(0x808080)
-document.body.prepend(renderer.domElement);
+// document.body.prepend(renderer.domElement);
 
 // Add a plane for visualization
 let textureData = new Uint8Array(Nx * Ny * 4); // RGBA
@@ -119,72 +266,92 @@ scene.add(plane);
 renderer.render(scene, camera);
 
 
-// INITIALIZATION
+// SIMULATION INITIALIZATION
 
 function initialize_sim() {
     // create cylinder
-    cylinderMask = createCylinderMask(Nx / 4, Ny / 2, Ny / 6)
-    cylinderMaskArr = cylinderMask.arraySync()
-    
+    const cylinderMask = createCylinderMask(Nx / 4, Ny / 2, Ny / 6)
+
+    collisonAddObject(cylinderMask)
+    cylinderMask.dispose()
     // F
     if (debug) console.log("F before init: ", F.toString())
     // Assuming TensorFlow.js tensors and Nx, rho0, and idxs are predefined
+
+    set_initial_conditions(initial_noise_flag)
+
     F = tf.tidy(() => {
+        // Compute rho = sum(F, axis=2)
+        // Compute rho and expand its dimensions
+        const rho = F.sum(2).expandDims(2);
 
-        const initialBoostMask = createCylinderMask(Nx / 2, Ny / 2, Ny / 20)
-        F = tf.tidy(()=> {
-            const leftwardBoost = tf.tensor([0, 0, 0, 0, 0, 0, 0, -1.5, 0]) // Boost for f3
-                .reshape([1, 1, 9])
-                .tile([Nx, Ny, 1]);
-            // console.log(leftwardBoost.toString())
-
-            const maskedBoost = leftwardBoost.where(initialBoostMask.expandDims(-1), tf.zerosLike(leftwardBoost));
-            // console.log(maskedBoost.toString())
-            return F.add(maskedBoost)
-        });
-        // Update F[:,:,3]
-        // const X = tf.range(0, Nx)
-        // const XScaled = tf.scalar((2 * Math.PI)).mul(X).div(tf.scalar(Nx)).mul(4); // Scale X
-        // const cosineTerm = tf.cos(XScaled).mul(tf.scalar(0.2)).add(tf.scalar(1)); // 1 + 0.2 * cos(...)
-        // const addition = cosineTerm.mul(2).expandDims(1); // 2 * (1 + 0.2 * cos(...))
-        // if (debug) console.log("addition", addition.toString())
-        // const updatedF = tf.add(tf.slice(F, [0, 0, 3], [-1, -1, 1]), addition);
-        // if (debug) console.log(updatedF.toString())
-        // F = tf.concat(
-        //     [tf.slice(F, [0, 0, 0], [-1, -1, 3])
-        //         , updatedF
-        //         , tf.slice(F, [0, 0, 4], [-1, -1, -1])],
-        //     2
-        // );
-        if (debug) console.log(F.toString())
-
-
-        F = tf.tidy(() => {
-            // Compute rho = sum(F, axis=2)
-            // Compute rho and expand its dimensions
-            const rho = F.sum(2).expandDims(2);
-
-            // Scale all slices of F by rho0 / rho
-            return F.mul(rho0).div(rho); // Scale the entire tensor
-        });
-
-        return F;
+        // Scale all slices of F by rho0 / rho
+        const temp = F.mul(rho0).div(rho); // Scale the entire tensor
+        rho.dispose()
+        return temp
     });
+
 
     if (debug) console.log("F init:", F.toString())
     const rho = tf.tidy(() => { return F.sum(2) });
     const ux = tf.tidy(() => { return F.mul(cxs).sum(2).div(rho) });
     const uy = tf.tidy(() => { return F.mul(cys).sum(2).div(rho) });
     if (debug) console.log(ux.toString(), uy.toString())
-    if (VISUALIZATION_MODE==="velocity"){
-        const normalizedVelocity = getNormalizedVel(ux, uy)
-        visualize(normalizedVelocity)
-    } else if (VISUALIZATION_MODE==="vorticity"){
-        const normVort = getNormalizedVorticity(ux,uy)
-        visualize(normVort)
+    if (VISUALIZATION_MODE === "velocity") {
+        visualArr = getNormalizedVel(ux, uy)
+        visualize()
+    } else if (VISUALIZATION_MODE === "vorticity") {
+        visualArr = getNormalizedVorticity(ux, uy)
+        visualize()
     }
+
+    tf.dispose([rho, ux, uy])
 }
 
+function set_initial_conditions(noiseFlag) {
+    F = tf.tidy(() => {
+
+        const noiseLevel = noiseFlag ? 0.5 : 0; // Scale of the random noise
+        // console.log("noise: ", noiseLevel)
+        const initialBoostMask = createCylinderMask(Nx / 2, Ny / 2 - 10, Ny / 20)
+
+        // Create the base tensor
+        const baseTensor = tf.tensor([0, -.25, 0, 0, 0, 0, 0, -.5, -1.5])
+            .reshape([1, 1, 9])
+            .tile([Ny, Nx, 1]);
+
+        // Create a mask to isolate the 8th element (index 7)
+        const mask = tf.tensor([0, 1, 0, 0, 0, 0, 0, 1, 1])
+            .reshape([1, 1, 9])
+            .tile([Ny, Nx, 1]);
+
+        // Generate random noise for the 8th element
+        const noise = tf.randomUniform([Ny, Nx, 9], -noiseLevel, noiseLevel)
+            .mul(mask); // Apply the mask to restrict noise to the 8th element
+
+        // Add the noise to the base tensor
+        const leftwardBoost = baseTensor.add(noise);
+
+        // console.log(leftwardBoost.toString())
+
+        const tempF = F.add(leftwardBoost.where(initialBoostMask.expandDims(-1), tf.zerosLike(leftwardBoost)));
+        // console.log(maskedBoost.toString())
+        tf.dispose([baseTensor, mask, noise, leftwardBoost, initialBoostMask])
+
+        return tempF
+    });
+    if (debug) console.log(F.toString())
+}
+
+function collisonAddObject(newObjectMask) {
+    objectMask = tf.tidy(() => {
+        return objectMask.add(newObjectMask).cast('bool')
+    });
+    objectMaskArr = objectMask.arraySync()
+    if (debug) {
+        console.log("New Object Mask: ", objectMaskArr)
+    }
+}
 
 function createCylinderMask(centerX, centerY, radius) {
 
@@ -197,11 +364,13 @@ function createCylinderMask(centerX, centerY, radius) {
         const xOffset = X.sub(centerX); // X - Nx/4
         const yOffset = Y.sub(centerY); // Y - Ny/2
         const radiusSquared = tf.scalar(radius ** 2); // (Ny/4)^2
-        return xOffset.square().add(yOffset.square()).less(radiusSquared); // Check boundary
+        const cyl = xOffset.square().add(yOffset.square()).less(radiusSquared); // Check boundary
+        tf.dispose([xOffset, yOffset, radiusSquared])
+        return cyl
     });
 
     // Print the result as boolean array (optional for debug)
-    if (debug) cylinder.array().then(array => console.log(array));
+    if (debug) cylinder.array().then(array => console.log("cylinder:", array));
     return cylinder
 }
 
@@ -229,40 +398,47 @@ function simulate(total_steps) {
 
 async function updateSimulation(step) {
     if (debug) console.log("vis_intrv", VISUALIZATION_INTERVAL)
-    
+
     // Drift
-    F = tf.tidy(() => {
-        // Map and process all velocity components
-        const shiftedF = cxs.map((cx, i) => {
+    // Map and process all velocity components
+    const shiftedF = cxs.map((cx, i) => {
+        return tf.tidy(() => {
             let f = tf.gather(F, i, 2); // Slice a single component
             f = tfRoll(f, cx, 1); // Roll along the x-axis
             f = tfRoll(f, cys[i], 0); // Roll along the y-axis
             return f.expandDims(2); // Expand dimensions to retain shape
-        });
-
-
+        })
+    });
+    F = tf.tidy(() => {
         // Concatenate along the last axis to combine all components
         return tf.concat(shiftedF, 2);
     });
+    tf.dispose(shiftedF)
+
     // console.log("F post-drift:",F.toString())
 
     // reflective boundaries
 
     // Step 1: Extract boundary data using the cylinder mask
-    // console.log(cylinderMask.toString(), cylinderMask.shape, cylinderMask.dtype)
-    const maskIndices = await tf.whereAsync(cylinderMask); // Get indices where mask is true
-    console.log(maskIndices.toString())
+
+    const maskIndices = await tf.whereAsync(objectMask); // Get indices where mask is true
+    if (debug) console.log(maskIndices.toString(), F.toString())
     // Step 2: Reorder the velocity directions
     const reorderedBndryF = tf.tidy(() => {
-        const bndryF = tf.tidy(() => {
-            return tf.gatherND(F, maskIndices); // Extract rows corresponding to the mask
-        });
+        const bndryF = tf.gatherND(F, maskIndices); // Extract rows corresponding to the mask
         // console.log(bndryF.toString())
-        return bndryF.gather([0, 5, 6, 7, 8, 1, 2, 3, 4], 1);
+        const reord = bndryF.gather([0, 5, 6, 7, 8, 1, 2, 3, 4], 1);
+        bndryF.dispose()
+        return reord
     });
 
     // Debugging: Print shape or values (optional)
-    reorderedBndryF.print();
+    // reorderedBndryF.print();
+    // Apply Collision
+    F = tf.tidy(() => {
+        return tf.tensorScatterUpdate(F, maskIndices, reorderedBndryF)
+    });
+    tf.dispose(reorderedBndryF)
 
     // Calculate fluid variables
     const rho = tf.tidy(() => { return F.sum(2) });
@@ -272,13 +448,11 @@ async function updateSimulation(step) {
     // console.log("uX: ", ux.shape, ux.toString())
     // console.log("uY: ", uy.shape, uy.toString())
 
-    // Apply Collision
-    F = tf.tensorScatterUpdate(F, maskIndices, reorderedBndryF)
 
     // Equilibrium
-    const Feq = tf.tidy(() => {
-        const we = weights.map((w, i) => {
-            // console.log(w, i)
+    const we = weights.map((w, i) => {
+        // console.log(w, i)
+        return tf.tidy(() => {
             const temp = rho.mul(tf.scalar(w))
             const cAdded = ux.mul(tf.scalar(cxs[i])).add(uy.mul(tf.scalar(cys[i])))
             const term0 = tf.scalar(1)
@@ -286,35 +460,38 @@ async function updateSimulation(step) {
             const term2 = tf.scalar(9).mul(tf.pow(cAdded, 2)).div(tf.scalar(2))
             const term3 = tf.scalar(3).mul((ux.square().add(uy.square()))).div(tf.scalar(2))
             const tempops = term0.add(term1).add(term2).sub(term3)
-            return temp.mul(tempops)
+            const final = temp.mul(tempops)
+            tf.dispose([temp, cAdded, term0, term1, term2, term3, tempops])
+            return final
         });
-        // console.log("weights", we.toString());
-        return tf.stack(
-            we,
-            2
-        );
     });
+    const Feq = tf.tidy(() => {
+        // console.log("weights", we.toString());
+        return tf.stack(we, 2);
+    });
+    tf.dispose(we)
     // console.log("feq", Feq.toString())
     // console.log("F precol:", F.toString())
     F = tf.tidy(() => { return F.add(F.sub(Feq).mul(-1.0 / tau)) });
+    tf.dispose(Feq)
     if (debug) console.log("F postcol:", F.toString())
-    // Apply boundary conditions
-    // F = tf.tidy(() => tf.where(tf.logicalNot(cylinder), F, boundaryF.expandDims(-1)));
 
     if (debug) console.log("step vis_int:", step, VISUALIZATION_INTERVAL)
     // Visualization
     if (step % VISUALIZATION_INTERVAL === 0) {
-        console.log(step)
-        if (VISUALIZATION_MODE==="vorticity"){
-            const vorticity = getNormalizedVorticity(ux, uy)
-            visualize(vorticity)
-        } else if (VISUALIZATION_MODE==="velocity"){
-            const normalizedVelocity = getNormalizedVel(ux, uy)
-            visualize(normalizedVelocity)
+        console.log("Visualizing step ", step)
+        if (VISUALIZATION_MODE === "vorticity") {
+            visualArr = getNormalizedVorticity(ux, uy)
+            visualize()
+        } else if (VISUALIZATION_MODE === "velocity") {
+            visualArr = getNormalizedVel(ux, uy)
+            visualize()
 
         }
-        
+
     }
+
+    tf.dispose([rho, ux, uy])
 }
 
 
@@ -326,84 +503,63 @@ function tfRoll(tensor, shift, axis) {
         return tensor.clone(); // No need to roll if the shift is 0
     }
 
-    const [start, end] = [
-        tf.slice(tensor, Array(axis).fill(0).concat([0]), Array(axis).fill(-1).concat([size - normalizedShift])),
-        tf.slice(tensor, Array(axis).fill(0).concat([size - normalizedShift]), Array(axis).fill(-1).concat([normalizedShift])),
-    ];
+    const [start, end] = tf.tidy(() => {
+        return [
+            tf.slice(tensor, Array(axis).fill(0).concat([0]), Array(axis).fill(-1).concat([size - normalizedShift])),
+            tf.slice(tensor, Array(axis).fill(0).concat([size - normalizedShift]), Array(axis).fill(-1).concat([normalizedShift])),
+        ];
 
-    return tf.concat([end, start], axis);
+    })
+    const rolled = tf.tidy(() => tf.concat([end, start], axis));
+    tf.dispose([end, start])
+    return rolled
 }
 
-function getNormalizedVorticity(ux,uy) {
-
-    // const velocityDirections = tf.stack([tf.tensor(cxs), tf.tensor(cys)], 1);  // Shape: [9, 2]
-
-    // // Compute vx and vy using the D2Q9 directions
-    // const vx = F.mul(velocityDirections.slice([0, 0], [9, 1]).squeeze())  // Multiply with x-components
-    //     .sum(2).div(rho);  // Sum across the 3rd axis (axis = 2)
-
-    // const vy = F.mul(velocityDirections.slice([0, 1], [9, 1]).squeeze())  // Multiply with y-components
-    //     .sum(2).div(rho);  // Sum across the 3rd axis (axis = 2)
-    // console.log(vx.shape, vy.shape)
-
-    // const vorticity = tf.tidy(() => {
-    //     // Calculate the finite differences (dvy/dx and dvx/dy) using slice with the correct size
-    //     const dxVy = vy.slice([1, 0], [vx.shape[0] - 1, vy.shape[1] - 1])
-    //         .sub(vy.slice([0, 0], [vx.shape[0] - 1, vy.shape[1] - 1]));  // dvy/dx
-    //     const dyVx = vx.slice([0, 1], [vx.shape[0] - 1, vx.shape[1] - 1])
-    //         .sub(vx.slice([0, 0], [vx.shape[0] - 1, vx.shape[1] - 1]));  // dvx/dy
-
-    //     return dxVy.sub(dyVx)
-    // });
-
-    let canceledUx = tf.tidy(()=>{return tf.zerosLike(ux).where(cylinderMask, ux)})
-    let canceledUy = tf.tidy(()=>{return tf.zerosLike(uy).where(cylinderMask, uy)})
-    let vorticity = tf.tidy(()=>{
+function getNormalizedVorticity(ux, uy) {
+    return tf.tidy(() => {
+        const canceledUx = tf.zerosLike(ux).where(objectMask, ux)
+        const canceledUy = tf.zerosLike(uy).where(objectMask, uy)
         const dxVy = tfRoll(canceledUx, -1, 0).sub(tfRoll(canceledUx, 1, 0))
         const dyVx = tfRoll(canceledUy, -1, 1).sub(tfRoll(canceledUy, 1, 1))
-        return dxVy.sub(dyVx)
-    })
-
-    vorticity = tf.fill(vorticity.shape, NaN).where(cylinderMask, vorticity)
-    console.log(vorticity.toString())
-    // Normalize vorticity to range [0, 1]
-    // const minVorticity = vorticity.min().dataSync();
-    // const maxVorticity = vorticity.max().dataSync();
-    // const normalizedVorticity = vorticity.sub(minVorticity).div(maxVorticity - minVorticity);
-    // console.log(normalizedVorticity.toString())
-    // return normalizedVorticity.arraySync();
-    return vorticity.arraySync();
+        const vorticity = dxVy.sub(dyVx)
+        const temp = tf.fill(vorticity.shape, NaN).where(objectMask, vorticity)
+        tf.dispose([canceledUx, canceledUy, dxVy, dyVx, vorticity])
+        return temp;
+    }).arraySync();
 }
 
 function getNormalizedVel(ux, uy) {
-    const velocityMagnitude = tf.tidy(() => ux.square().add(uy.square()).sqrt());
+
     // console.log("velocs: ", velocityMagnitude.toString())
-    const normalizedVelocity = tf.tidy(() => {
+
+    return tf.tidy(() => {
+        const velocityMagnitude = ux.square().add(uy.square()).sqrt();
         const min = velocityMagnitude.min();
         const max = velocityMagnitude.max();
         // console.log(min.toString(), max.toString())
-        return tf.where(
+        const normed = tf.where(
             min.equal(max),
             tf.zerosLike(velocityMagnitude), // All zeros if min == max
             velocityMagnitude.sub(min).div(max.sub(min)) // Normalize
         );
-    });
 
-    return normalizedVelocity.arraySync()
+        tf.dispose([min, max, velocityMagnitude])
+        return normed
+    }).arraySync()
 }
 
 // Visualization using THREE.js
-function visualize(visualArr) {
+function visualize() {
     // Convert to texture
 
     // console.log("visualization values:", visualArr)
-    if (debug) console.log(cylinderMaskArr)
+    if (debug) console.log("objects", objectMaskArr)
 
     for (let y = 0; y < Ny; y++) {
         for (let x = 0; x < Nx; x++) {
 
             const idx = (y * Ny + x) * 4;
-            if (!cylinderMaskArr[y][x]) {
+            if (!objectMaskArr[y][x]) {
                 if (VISUALIZATION_MODE === "velocity") {
                     // velocity
                     const color = Math.floor(visualArr[y][x] * 255);
@@ -413,7 +569,7 @@ function visualize(visualArr) {
                         textureData[idx + 1] = color;
                         textureData[idx + 2] = 255; // diff shades of blue
                         textureData[idx + 3] = alphaValue;
-                        
+
                     }
                 } else if (VISUALIZATION_MODE === "vorticity") {
                     // vorticity
@@ -423,7 +579,7 @@ function visualize(visualArr) {
                     textureData[idx] = r * 255;   // Red channel
                     textureData[idx + 1] = 0;     // Green channel (fixed to 0)
                     textureData[idx + 2] = b * 255; // Blue channel
-                    
+
                 }
             } else {
                 textureData[idx] = grayValue;
@@ -435,18 +591,20 @@ function visualize(visualArr) {
     }
 
     if (debug) console.log(textureData)
-    
+
     texture.needsUpdate = true;
     renderer.render(scene, camera);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    setCanvSizes()
     // Start simulation
     initialize_sim()
 });
 
 // Resize handling
 window.addEventListener('resize', () => {
-    renderer.setSize(getRenderWidth(), getRenderHeight());
+    renderer.setSize(getRenderHeight(), getRenderHeight());
+    setCanvSizes()
     renderer.render(scene, camera);
 });

@@ -10,12 +10,24 @@
 </head>
 
 <body>
-    <canvas id="fluidCanvas"></canvas>
     <script src="./main.js" type="module"></script>
-    <button id="startButton">Start</button>
-    <button id="pauseButton" disabled>Pause</button>
-    <button id="resetButton">Reset</button>
-    <button id="advanceButton">Advance By 1 Frame</button>
+    <section>
+
+        <div id="canvasContainer" style="position: static;">
+            <canvas id="fluidCanvas" style="position: absolute;"></canvas>
+            <canvas id="UICanvas" style="position: absolute;"></canvas>
+        </div>
+        <div id="buttonContainer" style="margin-top: 20px;">
+            <button id="startButton">Start</button>
+            <button id="pauseButton" disabled>Pause</button>
+            <button id="resetButton">Reset</button>
+            <button id="advanceButton">Advance By 1 Frame</button>
+            <button id="addCircleButton">Add Circle</button>
+        </div>
+        <div id="instructionBox" style="border: 1px solid #ccc; padding: 10px; width: 300px;" hidden>
+            Instructions will appear here.
+        </div>
+    </section>
     <section id="project-description">
         <h1>Fluid Simulation</h1>
         <section id="background-information">
