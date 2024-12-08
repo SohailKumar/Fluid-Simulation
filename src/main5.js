@@ -222,7 +222,12 @@ function setupShaders(){
         uniforms: {
             uTexture: { value: null },
         },
-        fragmentShader: document.getElementById('multiply').innerHTML
+        fragmentShader: `uniform image2D uTexture;
+
+		void main() {
+			vec4 color = texture2D(uTexture, gl_FragCoord.xy / vec2(128, 128));
+			gl_FragColor = color * vec4(0.5, 1.0, 0.5, 1.0); // Multiply color by greenish color
+		}`
     });
     shadersDict["shaderMultiply"] = shaderMultiply;
 
@@ -234,16 +239,150 @@ function setupShaders(){
     });
     shadersDict["shaderInvert"] = shaderInvert;
 
-    const boundaryMaskShader = new THREE.ShaderMaterial({
+    const boundaryShader = new THREE.ShaderMaterial({
         uniforms: {
             uTexture: { value: null },
             uBoundary: { value: boundaryTexture}
             // Add more uniforms for velocity, density, etc.
         },
-        // vertexShader: `...`,  // TODO: might need a Pass-through vertex shader
-        fragmentShader: document.getElementById('boundary').innerHTML
+        vertexShader: `varying vec2 vUv;
+
+void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`,  // TODO: might need a Pass-through vertex shader
+        // fragmentShader: document.getElementById('boundary').innerHTML
+        fragmentShader: `uniform sampler2D uTexture;   // The distribution function texture
+varying vec2 vUv;
+
+void main() {
+    vec4 f = texture2D(uTexture, vUv);      // Fetch distribution function at this point
+
+    // Apply no-slip boundary condition (do nothing at boundary)
+    if (f.b > 0.5) {
+        // Do nothing to the distribution function at the boundary
+        // The distribution function remains unchanged at the boundary
+        // f = f;  // This line is redundant but included for clarity
+    }
+
+    // Output the (potentially unchanged) distribution functions
+    gl_FragColor = f;
+}`
     });
-    shadersDict["boundaryMaskShader"] = boundaryMaskShader;
+    shadersDict["boundaryShader"] = boundaryShader;
+
+    const collisionShader = new THREE.ShaderMaterial({
+        uniforms: {
+            uTexture: { value: null },
+            uTau: { value: 0.8 }
+            // Add more uniforms for velocity, density, etc.
+        },
+        vertexShader: `varying vec2 vUv;
+
+void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`,
+        // fragmentShader: document.getElementById('collision').innerHTML
+        fragmentShader: `uniform sampler2D uTexture;
+uniform float tau; // Relaxation time
+varying vec2 vUv;
+
+void main() {
+    vec4 f = texture2D(uTexture, vUv);
+
+    // Simple BGK collision (relax distribution function to equilibrium)
+    float rho = 0.0;
+    for ( int i = -1; i <= 1; ++i ) {
+        for ( int j = -1; j <= 1; ++j ) {
+            vec2 pos = vUv + vec2(float(i), float(j));
+            vec4 colorsIJ = texture2D(uTexture, pos); 
+            rho += colorsIJ.r;
+        }
+    }
+    
+    if(f.b > 0.5){
+        rho = 0.0;
+        gl_FragColor = f;
+    }else{
+        // vec4 equilibrium = vec4(rho * 0.25); // Simplified equilibrium distribution TODO make complex
+        float equilibrium = rho * 0.25;
+
+        // Relax the distribution functions towards equilibrium
+        f.r = f.r + (equilibrium - f.r) / tau; //1/tau is omega
+
+        gl_FragColor = f; // Output the updated distribution functions (no color output yet)
+    }
+}
+`
+    });
+    shadersDict["collisionShader"] = collisionShader;
+
+
+    const streamingShader = new THREE.ShaderMaterial({
+        uniforms: {
+            uTexture: { value: null },
+        },
+        // vertexShader: `...`,
+        // fragmentShader: document.getElementById('streaming').innerHTML // Your LBM streaming step logic
+        fragmentShader: `uniform sampler2D uTexture;
+varying vec2 vUv;
+
+void main() {
+    vec4 f = texture2D(uTexture, vUv);
+
+    // Streaming step: shift the distribution functions based on lattice directions
+    // (For simplicity, we're using a shift for demonstration; you'll need to modify it for D2Q9 model)
+    vec2 shift = vec2(0.01, 0.0); // Example shift
+    vec4 shiftedF = texture2D(uTexture, vUv + shift);
+
+    gl_FragColor = shiftedF; // Output the shifted distribution functions (no color output yet)
+}`
+    });
+    shadersDict["streamingShader"] = streamingShader;
+
+    const visualizationShader = new THREE.ShaderMaterial({
+        uniforms: {
+            uTexture: { value: null },
+        },
+        vertexShader: `varying vec2 vUv;
+
+void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`,
+        // fragmentShader: document.getElementById('streaming').innerHTML // Your LBM streaming step logic
+        fragmentShader: `
+uniform sampler2D uTexture;
+varying vec2 vUv;
+
+void main() {
+    // Retrieve the distribution functions (stored in RGBA channels)
+    vec4 f = texture2D(uTexture, vUv);
+
+    // Compute the density (sum of all distribution functions)
+    float density = 0.0;
+    for ( int i = -1; i <= 1; ++i ) {
+        for ( int j = -1; j <= 1; ++j ) {
+            vec2 pos = vUv + vec2(float(i), float(j));
+            vec4 colorsIJ = texture2D(uTexture, pos); 
+            density += colorsIJ.r;
+        }
+    }
+
+    if(f.b < 0.5){
+        // Visualize the density as grayscale (for simplicity)
+        // You can replace this with any color mapping logic you want
+        vec3 color = vec3(density, density, density); // Grayscale color
+
+        gl_FragColor = vec4(color, 1.0); // Output the final color
+    }else{
+        gl_FragColor = f;
+    }
+}
+`
+    });
+    shadersDict["visualizationShader"] = visualizationShader;
 }
 setupShaders();
 
@@ -264,10 +403,12 @@ function simulateSingleShader(name){
 function simulateAll(){
     // simulateSingleShader("shaderMultiply");
     // simulateSingleShader("shaderInvert");
-    simulateSingleShader("boundaryMaskShader");
-    simulateSingleShader("collisionShader");
-    simulateSingleShader("streamingShader");
     simulateSingleShader("boundaryShader");
+    console.log("first", currentRT.texture);
+    simulateSingleShader("collisionShader");
+    console.log(currentRT.texture);
+    // simulateSingleShader("streamingShader");
+    simulateSingleShader("visualizationShader");
     //final output in currentRT since the last target was nextRT and it's data was moved to currentRT
 }
 

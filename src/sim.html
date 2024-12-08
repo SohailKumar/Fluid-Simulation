@@ -13,7 +13,7 @@
     <canvas id="fluidCanvas"></canvas>
     <script src="./main5.js" type="module"></script>
 	<script id="multiply" type="x-shader/x-fragment">
-		uniform sampler2D uTexture;
+		uniform image2D uTexture;
 
 		void main() {
 			vec4 color = texture2D(uTexture, gl_FragCoord.xy / vec2(128, 128));
@@ -31,80 +31,60 @@
 	</script>
 
 	<script id ="boundary" type="x-shader/x-fragment">
-		uniform uResolution;
-		uniform uTexture;
-		const uint x = gl_GlobalInvocationID.x;
-		const uint y = gl_GlobalInvocationID.y;
+		#version 450
 
-		uint indexOfDirection(int i, int j) {
-			return 3*(j+1) + (i+1);
-		}
-		
-		uint indexOfLatticeCell(uint x, uint y) {
-			return 9*uResolution*y + 9*x;
-		}
+		// Texture containing distribution functions (current state)
+		uniform sampler2D uTexture;
+		uniform image2D uTextureNext;	
 
-		// Assuming `f` is a 2D array holding the distribution functions at each lattice point
-		// `i` is the index of the direction (0 to 8 for D2Q9)
-		vec2 boundary_normal = vec2(0.0, 1.0); // Normal vector pointing to the boundary (e.g., top boundary)
-		
+		in vec2 texCoord;  // Texture coordinates (normalized)
+
 		void applyNoSlipBoundaryCondition() {
-			for ( int i = -1; i <= 1; ++i ) {
-				for ( int j = -1; j <= 1; ++j ) {
-					if (isAtBoundary(x+i, x+j)) {
-						int opposite_i = getOppositeDirection(i); // Opposite direction of the lattice
-						f[i] = f[opposite_i]; // Bounce-back: reverse the distribution function
-					}
+			ivec2 globalID = ivec2(texCoord * vec2(textureSize(uTexture, 0))); // Convert to global grid coordinates
+			
+			// Check if we're at a boundary (for simplicity, assuming top boundary)
+			if (globalID.y == textureSize(uTexture, 0).y - 1) {  // Top boundary (adjust as needed)
+				for (int i = 0; i < 9; i++) {
+					int opposite_i = getOppositeDirection(i);
+					
+					// Get current distribution function from uTexture
+					vec4 f = imageLoad(uTexture, globalID);
+					
+					// Bounce-back rule: reverse the distribution function at the boundary
+					f[i] = imageLoad(uTexture, globalID + getDirectionOffset(opposite_i));
+					
+					// Store updated distribution function into uTextureNext
+					imageStore(uTextureNext, globalID, f);
 				}
 			}
 		}
-		
-		bool isAtBoundary() {
-			// Check if the current grid cell is at the boundary
-			// This could be based on position in the grid (e.g., y == grid_height - 1)
-			return (position.y == grid_height - 1);
-		}
-		
+
 		int getOppositeDirection(int i) {
-			// Return the index of the opposite direction for D2Q9
+			// Opposite directions for D2Q9 lattice
 			int opposite[9] = {0, 3, 4, 1, 2, 5, 6, 7, 8};
 			return opposite[i];
-		}		
-	</script>
+		}
 
-	<script id="collision" type="x-shader/x-fragment">
-		void applyCollisionStep(float tau) {
-			vec2 velocity = computeMacroscopicVelocity(); // Calculate the macroscopic velocity
-			for (int i = 0; i < 9; i++) {
-				// Compute equilibrium distribution function for each direction
-				float feq = computeEquilibriumDistribution(i, velocity);
-				
-				// Relaxation step
-				f[i] = f[i] - (1.0 / tau) * (f[i] - feq);
-			}
+		ivec2 getDirectionOffset(int i) {
+			// Directional offsets for D2Q9 lattice (assumed to be in 2D grid)
+			ivec2 offsets[9] = {
+				ivec2(1, 0),  // right
+				ivec2(-1, 0), // left
+				ivec2(0, 1),  // up
+				ivec2(0, -1), // down
+				ivec2(1, 1),  // up-right
+				ivec2(-1, 1), // up-left
+				ivec2(1, -1), // down-right
+				ivec2(-1, -1),// down-left
+				ivec2(0, 0)   // center
+			};
+			return offsets[i];
 		}
-		
-		vec2 computeMacroscopicVelocity() {
-			// Compute the macroscopic velocity from the distribution functions
-			vec2 velocity = vec2(0.0, 0.0);
-			float rho = 0.0;
-			
-			for (int i = 0; i < 9; i++) {
-				rho += f[i]; // Sum of all distribution functions gives density
-				velocity += f[i] * e[i]; // Velocity is weighted sum of distribution functions and lattice directions
-			}
-			
-			velocity /= rho; // Normalize by density
-			return velocity;
+
+		void main() {
+			applyNoSlipBoundaryCondition();
 		}
-		
-		float computeEquilibriumDistribution(int i, vec2 velocity) {
-			// Calculate the equilibrium distribution function for the i-th direction
-			float ci = dot(velocity, e[i]);
-			float usqr = dot(velocity, velocity);
-			
-			return w[i] * (1.0 + ci / (c_s * c_s) + 0.5 * (ci * ci) / (c_s * c_s * c_s * c_s) - 0.5 * usqr / (c_s * c_s));
-		}		
+
 	</script>
 
 	<script id="streaming" type="x-shader/x-fragment">

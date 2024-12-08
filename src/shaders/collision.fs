@@ -61,7 +61,6 @@ vec2 velocity(uint x, uint y, float d) {
 	);
 }
 
-
 //////////////////////////////
 const uint x = gl_GlobalInvocationID.x;
 const uint y = gl_GlobalInvocationID.y;
