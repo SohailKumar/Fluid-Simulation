@@ -1,64 +1,82 @@
-// uint indexOfDirection(int i, int j) {
-//     return 3*(j+1) + (i+1);
-// }
-// // 6,7,8,
-// // 3,4,5,
-// // 0,1,2    
-
-// uint indexOfLatticeCell(uint x, uint y) {
-//     return q*nX*y + q*x;
-// }
-precision highp float;
-
-uniform sampler2D uCurrentState; // Texture storing the current distributions f_i
-uniform float uOmega;            // Relaxation parameter (omega)
-uniform vec2 uGridSize;          // Grid size (resolution)
-
-const vec2 c[9] = vec2[](
-    vec2(0.0, 0.0),
-    vec2(1.0, 0.0),
-    vec2(0.0, 1.0),
-    vec2(-1.0, 0.0),
-    vec2(0.0, -1.0),
-    vec2(1.0, 1.0),
-    vec2(-1.0, 1.0),
-    vec2(-1.0, -1.0),
-    vec2(1.0, -1.0)
+const uint  q         = 9;
+const float weight[q] = float[](
+    1./36., 1./9., 1./36.,
+    1./9. , 4./9., 1./9. ,
+    1./36 , 1./9., 1./36.
 );
 
-const float w[9] = float[](4.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 36.0, 1.0 / 36.0, 1.0 / 36.0, 1.0 / 36.0);
+const float tau   = 0.8;
+const float omega = 1/tau;
 
-void main() {
-    vec2 uv = gl_FragCoord.xy / uGridSize;
-    vec3 f[9];
+////
+float comp(int i, int j, vec2 v) {
+	return i*v.x + j*v.y;
+}
 
-    // Load the distributions for all 
-    for (int i = 0; i < 9; i++) {
-        f[i] = texture2D(uCurrentState, uv).rgb;
+float sq(float x) {
+	return x*x;
+}
+
+float norm(vec2 v) {
+	return sqrt(dot(v,v));
+}
+////
+
+uint indexOfDirection(int i, int j) {
+    return 3*(j+1) + (i+1);
+}
+
+uint indexOfLatticeCell(uint x, uint y) {
+    return q*nX*y + q*x;
+}
+
+float w(int i, int j) {
+    return weight[indexOfDirection(i,j)];
+}
+
+float get(uint x, uint y, int i, int j) {
+    return collideCells[indexOfLatticeCell(x,y) + indexOfDirection(i,j)];
+}
+
+float equilibrium(float d, vec2 u, int i, int j) {
+    return w(i,j)
+         * d
+         * (1 + 3*comp(i,j,u) + 4.5*sq(comp(i,j,u)) - 1.5*sq(norm(u)));
+}
+//////////////////////////////
+
+float density(uint x, uint y) {
+	const uint idx = indexOfLatticeCell(x, y);
+	float d = 0.f;
+	for ( int i = 0; i < q; ++i ) {
+		d += collideCells[idx + i];
+	}
+	return d;
+}
+
+vec2 velocity(uint x, uint y, float d) {
+	return 1.f/d * vec2(
+		get(x,y, 1, 0) - get(x,y,-1, 0) + get(x,y, 1, 1) - get(x,y,-1,-1) + get(x,y, 1,-1) - get(x,y,-1,1),
+		get(x,y, 0, 1) - get(x,y, 0,-1) + get(x,y, 1, 1) - get(x,y,-1,-1) - get(x,y, 1,-1) + get(x,y,-1,1)
+	);
+}
+
+
+//////////////////////////////
+const uint x = gl_GlobalInvocationID.x;
+const uint y = gl_GlobalInvocationID.y;
+
+const float d = density(x,y);
+const vec2  v = velocity(x,y,d);
+
+setFluid(x,y,v,d);
+
+//for each of the 9 directions
+for ( int i = -1; i <= 1; ++i ) {
+    for ( int j = -1; j <= 1; ++j ) {
+        set(
+            x,y,i,j,
+            get(x,y,i,j) + omega * (equilibrium(d,v,i,j) - get(x,y,i,j))
+        );
     }
-
-    // Compute macroscopic density and velocity
-    float rho = 0.0;
-    vec2 u = vec2(0.0);
-    for (int i = 0; i < 9; i++) {
-        rho += f[i].r;
-        u += c[i] * f[i].r;
-    }
-    u /= rho;
-
-    // Compute equilibrium distribution f_i^eq
-    vec3 fEq[9];
-    for (int i = 0; i < 9; i++) {
-        float cu = dot(c[i], u);
-        fEq[i] = vec3(w[i] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - 1.5 * dot(u, u)));
-    }
-
-    // Apply BGK collision
-    vec3 fPostCollision[9];
-    for (int i = 0; i < 9; i++) {
-        fPostCollision[i] = f[i] + uOmega * (fEq[i] - f[i]);
-    }
-
-    // Output the post-collision distributions
-    gl_FragColor = vec4(fPostCollision[0].r, fPostCollision[1].r, fPostCollision[2].r, 1.0);
 }

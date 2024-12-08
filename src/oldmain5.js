@@ -69,110 +69,31 @@ var rt2;
 var currentRT;
 var nextRT;
 
-var boundaryTexture;
-function createBoundaryMask(){
-    const width = resolution;
-    const height = resolution;
-    const data = new Float32Array(width * height * 4);
-
-    // Set edge pixels to blue (R = 0, G = 0, B = 1, A = 1)
-    for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-            const index = (y * width + x) * 4;
-            
-            // Left edge (x = 0)
-            if (x === 0) {
-                data[index] = 0;     // Red
-                data[index + 1] = 0; // Green
-                data[index + 2] = 1; // Blue
-                data[index + 3] = 1; // Alpha
-            }
-            // Right edge (x = width - 1)
-            else if (x === width - 1) {
-                data[index] = 0;     // Red
-                data[index + 1] = 0; // Green
-                data[index + 2] = 1; // Blue
-                data[index + 3] = 1; // Alpha
-            }
-            // Top edge (y = 0)
-            else if (y === 0) {
-                data[index] = 0;     // Red
-                data[index + 1] = 0; // Green
-                data[index + 2] = 1; // Blue
-                data[index + 3] = 1; // Alpha
-            }
-            // Bottom edge (y = height - 1)
-            else if (y === height - 1) {
-                data[index] = 0;     // Red
-                data[index + 1] = 0; // Green
-                data[index + 2] = 1; // Blue
-                data[index + 3] = 1; // Alpha
-            }
-        }
-    }
-
-    const texture = new THREE.DataTexture(data, width, height, THREE.RGBAFormat, THREE.FloatType);
-    texture.needsUpdate = true;
-    return texture;
-}
-
 function createInitialTexture() {
     const width = resolution;
     const height = resolution;
 
     const data = new Float32Array(width * height * 4);  // RGBA for each pixel
 
-    // Create the initial texture (red color)
     for (let i = 0; i < width * height; i++) {
-        data[i * 4 + 0] = Math.random();  // Red channel
+        data[i * 4 + 0] = 1.0;  // Initial density in Red channel
         data[i * 4 + 1] = 0.0;  // Green channel
         data[i * 4 + 2] = 0.0;  // Blue channel
         data[i * 4 + 3] = 1.0;  // Alpha channel (opaque)
     }
 
-    // Create the boundary texture (this assumes createBoundaryMask() is defined already)
-    const boundaryTexture = createBoundaryMask();
-
-    // Overlay boundary texture onto initial texture
-    const boundaryData = boundaryTexture.image.data;
-
-    for (let i = 0; i < width * height; i++) {
-        const index = i * 4;
-
-        const r1 = data[index + 0];  // Initial Red
-        const g1 = data[index + 1];  // Initial Green
-        const b1 = data[index + 2];  // Initial Blue
-        const a1 = data[index + 3];  // Initial Alpha
-
-        const r2 = boundaryData[index + 0];  // Boundary Red
-        const g2 = boundaryData[index + 1];  // Boundary Green
-        const b2 = boundaryData[index + 2];  // Boundary Blue
-        const a2 = boundaryData[index + 3];  // Boundary Alpha
-
-        // Simple blending, using boundary texture's alpha channel for interpolation
-        const alpha = a2; // You can modify this if you want a different blend effect
-
-        // Blend the colors
-        data[index + 0] = r1 * (1 - alpha) + r2 * alpha;  // Red channel blend
-        data[index + 1] = g1 * (1 - alpha) + g2 * alpha;  // Green channel blend
-        data[index + 2] = b1 * (1 - alpha) + b2 * alpha;  // Blue channel blend
-        data[index + 3] = a1 * (1 - alpha) + a2 * alpha;  // Alpha channel blend
-    }
-
     const texture = new THREE.DataTexture(data, width, height, THREE.RGBAFormat, THREE.FloatType);
     texture.needsUpdate = true;
-
     return texture;
 }
 
 function setupScene() {
     // same across scenes
     renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('fluidCanvas') });
-    const size = Math.min(getRenderWidth(), getRenderHeight());
-    renderer.setSize(size, size);
-    renderer.setClearColor('black', 1)
+    renderer.setSize(getRenderWidth(), getRenderHeight());
+    renderer.setClearColor('gray', 1)
 
-    camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 1000); //vars: left right top bottom near far //TODO: might need to change camera width and heigh to screen width and height. update those every frame if so.
+    camera = new THREE.OrthographicCamera(-1.5, 1.5, 1, -1, 1, 1000); //vars: left right top bottom near far //TODO: might need to change camera width and heigh to screen width and height. update those every frame if so.
     camera.position.z = 2;
 
     geo = new THREE.PlaneGeometry(geoWidth, geoHeight);
@@ -230,22 +151,53 @@ function setupShaders(){
         uniforms: {
             uTexture: { value: null },
         },
-        fragmentShader: document.getElementById('invert').innerHTML
+        fragmentShader: document.getElementById('multiply').innerHTML
     });
     shadersDict["shaderInvert"] = shaderInvert;
-
-    const boundaryMaskShader = new THREE.ShaderMaterial({
+    
+    const collisionShader = new THREE.ShaderMaterial({
         uniforms: {
-            uTexture: { value: null },
-            uBoundary: { value: boundaryTexture}
-            // Add more uniforms for velocity, density, etc.
+            uTexture: { value: currentRT.texture },
+            uOmega: { value: 1.0 },
+            uGridSize: { value: new THREE.Vector2(resolution, resolution) }
         },
-        // vertexShader: `...`,  // TODO: might need a Pass-through vertex shader
-        fragmentShader: document.getElementById('boundary').innerHTML
+        fragmentShader: document.getElementById('collision').innerHTML
     });
-    shadersDict["boundaryMaskShader"] = boundaryMaskShader;
+    shadersDict["collisionShader"] = collisionShader;
+
+    const streamingShader = new THREE.ShaderMaterial({
+        uniforms: {
+            uTexture: { value: currentRT.texture },
+            uGridSize: { value: new THREE.Vector2(resolution, resolution) }
+        },
+        fragmentShader: document.getElementById('streaming').innerHTML
+    });
+    shadersDict["streamingShader"] = streamingShader;
 }
-setupShaders();
+    
+
+async function loadShader(url) {
+    const response = await fetch(url);
+    return await response.text();
+}
+
+async function loadAllShaders() {
+    const multiplyShaderCode = await loadShader('./shaders/multiply.fs');
+    document.getElementById('multiply').innerHTML = multiplyShaderCode;
+    
+    const invertShaderCode = await loadShader('./shaders/invert.fs');
+    document.getElementById('invert').innerHTML = invertShaderCode;
+
+    const collisionShaderCode = await loadShader('./shaders/collision.fs');
+    document.getElementById('collision').innerHTML = collisionShaderCode;
+
+    const streamingShaderCode = await loadShader('./shaders/streaming.fs');
+    document.getElementById('streaming').innerHTML = streamingShaderCode;
+
+    setupShaders();
+
+    // render(); 
+}
 
 function simulateSingleShader(name){
     //run shader
@@ -261,31 +213,22 @@ function simulateSingleShader(name){
     [currentRT, nextRT] = [nextRT, currentRT];
 }
 
+//SIMULATION AND RENDERING
 function simulateAll(){
-    // simulateSingleShader("shaderMultiply");
-    // simulateSingleShader("shaderInvert");
-    simulateSingleShader("boundaryMaskShader");
-    simulateSingleShader("collisionShader");
-    simulateSingleShader("streamingShader");
-    simulateSingleShader("boundaryShader");
+    simulateSingleShader("shaderMultiply");
+    simulateSingleShader("shaderInvert");
+    // simulateSingleShader("collisionShader");
+    // simulateSingleShader("streamingShader");
     //final output in currentRT since the last target was nextRT and it's data was moved to currentRT
 }
 
-function displayInitial(){
-    displayMesh.material.map = currentRT.texture;
-    // reset to screen framebuffer.
-    renderer.setRenderTarget(null);
-    renderer.render(displayScene, camera);
-}
-displayInitial();
-
 function render() {
     stats.begin();
-
     if(params.isSimRunning){
         simulateAll();
 
         displayMesh.material.map = currentRT.texture;
+        displayMesh.material.needsUpdate = true;
 
         // reset to screen framebuffer.
         renderer.setRenderTarget(null);
@@ -301,4 +244,9 @@ function render() {
     requestAnimationFrame(render);
 
 }
-render();
+//wait until all shaders loaded to start rendering.
+loadAllShaders().then(() => {
+    render();
+}).catch((error) => {
+    console.error("Error loading shaders:", error);
+});

@@ -1,6 +1,6 @@
 precision highp float;
 
-uniform sampler2D uPostCollisionState; // Texture storing post-collision distributions
+uniform sampler2D uTexture; // Texture storing post-collision distributions
 uniform vec2 uGridSize;                // Grid size (resolution)
 
 const vec2 c[9] = vec2[](
@@ -21,8 +21,8 @@ void main() {
 
     // Stream distributions from neighboring cells
     for (int i = 0; i < 9; i++) {
-        vec2 neighborUV = uv - c[i] / uGridSize;
-        f[i] = texture2D(uPostCollisionState, neighborUV).rgb;
+        vec2 neighborUV = clamp(uv - c[i] / uGridSize, vec2(0.0), vec2(1.0));
+f[i] = texture2D(uTexture, neighborUV).rgb;
     }
 
     // Output the streamed distributions
