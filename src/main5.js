@@ -71,6 +71,8 @@ var nextRT;
 
 var boundaryTexture;
 function createBoundaryMask(){
+
+
     const width = resolution;
     const height = resolution;
     const data = new Float32Array(width * height * 4);
@@ -116,6 +118,7 @@ function createBoundaryMask(){
     return texture;
 }
 
+
 function createInitialTexture() {
     const width = resolution;
     const height = resolution;
@@ -160,6 +163,8 @@ function createInitialTexture() {
     }
 
     const texture = new THREE.DataTexture(data, width, height, THREE.RGBAFormat, THREE.FloatType);
+
+
     texture.needsUpdate = true;
 
     return texture;
@@ -343,43 +348,27 @@ void main() {
 
     const visualizationShader = new THREE.ShaderMaterial({
         uniforms: {
-            uTexture: { value: null },
+            my3DTexture: { value: null },
+            resolution: { value: new THREE.Vector3(10,10,10) }
         },
-        vertexShader: `varying vec2 vUv;
-
-void main() {
-    vUv = uv;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}`,
+        vertexShader: `void main() {
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
         // fragmentShader: document.getElementById('streaming').innerHTML // Your LBM streaming step logic
         fragmentShader: `
-uniform sampler2D uTexture;
-varying vec2 vUv;
+uniform sampler3D my3DTexture;
+        uniform vec3 resolution;
 
-void main() {
-    // Retrieve the distribution functions (stored in RGBA channels)
-    vec4 f = texture2D(uTexture, vUv);
+        void main() {
+            // Normalize the texture coordinates based on the plane's position
+            vec3 texCoord = gl_FragCoord.xyz / resolution;
 
-    // Compute the density (sum of all distribution functions)
-    float density = 0.0;
-    for ( int i = -1; i <= 1; ++i ) {
-        for ( int j = -1; j <= 1; ++j ) {
-            vec2 pos = vUv + vec2(float(i), float(j));
-            vec4 colorsIJ = texture2D(uTexture, pos); 
-            density += colorsIJ.r;
+            // Sample the 3D texture at the computed coordinates
+            vec4 texColor = texture(my3DTexture, texCoord);
+
+            // Output the sampled color
+            gl_FragColor = texColor;  // Just output the color from the texture
         }
-    }
-
-    if(f.b < 0.5){
-        // Visualize the density as grayscale (for simplicity)
-        // You can replace this with any color mapping logic you want
-        vec3 color = vec3(density, density, density); // Grayscale color
-
-        gl_FragColor = vec4(color, 1.0); // Output the final color
-    }else{
-        gl_FragColor = f;
-    }
-}
 `
     });
     shadersDict["visualizationShader"] = visualizationShader;
@@ -389,7 +378,7 @@ setupShaders();
 function simulateSingleShader(name){
     //run shader
     let shader = shadersDict[name]
-    bufferMesh.material = shadersDict[name]; // here is where we dynamically assign the material
+    bufferMesh.material = shader; // here is where we dynamically assign the material
     shader.uniforms.uTexture.value = currentRT.texture;
 
     //render to buffer scene
@@ -412,8 +401,20 @@ function simulateAll(){
     //final output in currentRT since the last target was nextRT and it's data was moved to currentRT
 }
 
+function visualize(){
+    let shader = shadersDict["visualizationShader"];
+    displayMesh.material = shader;
+    shader.uniforms.uTexture = currentRT.texture;
+
+}
+
 function displayInitial(){
-    displayMesh.material.map = currentRT.texture;
+    // visualize();
+    const material = new THREE.MeshBasicMaterial({
+        map: createInitialTexture(), // In reality, you'd pass this to a shader
+        // wireframe: true // Optional: wireframe for visualization
+      });
+    displayMesh.material = material
     // reset to screen framebuffer.
     renderer.setRenderTarget(null);
     renderer.render(displayScene, camera);
