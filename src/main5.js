@@ -70,46 +70,27 @@ var currentRT;
 var nextRT;
 
 var boundaryTexture;
-function createBoundaryMask(){
 
-
+// Function to create a boundary mask where alpha is 0 at the edges and 1 elsewhere
+function createBoundaryMask() {
     const width = resolution;
     const height = resolution;
     const data = new Float32Array(width * height * 4);
 
-    // Set edge pixels to blue (R = 0, G = 0, B = 1, A = 1)
     for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
             const index = (y * width + x) * 4;
-            
-            // Left edge (x = 0)
-            if (x === 0) {
-                data[index] = 0;     // Red
-                data[index + 1] = 0; // Green
-                data[index + 2] = 1; // Blue
-                data[index + 3] = 1; // Alpha
-            }
-            // Right edge (x = width - 1)
-            else if (x === width - 1) {
-                data[index] = 0;     // Red
-                data[index + 1] = 0; // Green
-                data[index + 2] = 1; // Blue
-                data[index + 3] = 1; // Alpha
-            }
-            // Top edge (y = 0)
-            else if (y === 0) {
-                data[index] = 0;     // Red
-                data[index + 1] = 0; // Green
-                data[index + 2] = 1; // Blue
-                data[index + 3] = 1; // Alpha
-            }
-            // Bottom edge (y = height - 1)
-            else if (y === height - 1) {
-                data[index] = 0;     // Red
-                data[index + 1] = 0; // Green
-                data[index + 2] = 1; // Blue
-                data[index + 3] = 1; // Alpha
-            }
+
+            // Check if the current pixel is on the boundary
+            const isBoundary = x === 0 || x === width - 1 || y === 0 || y === height - 1;
+
+            // Randomize RGB values
+            data[index] = Math.random();       // Red
+            data[index + 1] = Math.random();   // Green
+            data[index + 2] = Math.random();   // Blue
+
+            // Set alpha to 0 for boundaries, 1 otherwise
+            data[index + 3] = isBoundary ? 0.0 : 1.0;
         }
     }
 
@@ -118,53 +99,34 @@ function createBoundaryMask(){
     return texture;
 }
 
-
+// Function to create an initial texture and blend with the boundary mask
 function createInitialTexture() {
-    const width = resolution;
-    const height = resolution;
+    const size = 128;
+    const depth = 2; // Depth is set to 2 instead of size (to create a size * size * 2 texture)
+    
+    // Create an array to hold the texture data: size * size * depth * 4 channels (RGBA)
+    let data = new Float32Array(size * size * depth * 4);  
 
-    const data = new Float32Array(width * height * 4);  // RGBA for each pixel
-
-    // Create the initial texture (red color)
-    for (let i = 0; i < width * height; i++) {
-        data[i * 4 + 0] = Math.random();  // Red channel
-        data[i * 4 + 1] = 0.0;  // Green channel
-        data[i * 4 + 2] = 0.0;  // Blue channel
-        data[i * 4 + 3] = 1.0;  // Alpha channel (opaque)
+    for (let z = 0; z < depth; z++) {
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                let index = (z * size * size + y * size + x) * 4;
+    
+                // Example: random colors for each texel
+                data[index] = Math.random();      // Red
+                data[index + 1] = 0.0;  // Green
+                data[index + 2] = 0.0;  // Blue
+                data[index + 3] = 1.0;            // Alpha (fully opaque)
+            }
+        }
     }
 
-    // Create the boundary texture (this assumes createBoundaryMask() is defined already)
-    const boundaryTexture = createBoundaryMask();
-
-    // Overlay boundary texture onto initial texture
-    const boundaryData = boundaryTexture.image.data;
-
-    for (let i = 0; i < width * height; i++) {
-        const index = i * 4;
-
-        const r1 = data[index + 0];  // Initial Red
-        const g1 = data[index + 1];  // Initial Green
-        const b1 = data[index + 2];  // Initial Blue
-        const a1 = data[index + 3];  // Initial Alpha
-
-        const r2 = boundaryData[index + 0];  // Boundary Red
-        const g2 = boundaryData[index + 1];  // Boundary Green
-        const b2 = boundaryData[index + 2];  // Boundary Blue
-        const a2 = boundaryData[index + 3];  // Boundary Alpha
-
-        // Simple blending, using boundary texture's alpha channel for interpolation
-        const alpha = a2; // You can modify this if you want a different blend effect
-
-        // Blend the colors
-        data[index + 0] = r1 * (1 - alpha) + r2 * alpha;  // Red channel blend
-        data[index + 1] = g1 * (1 - alpha) + g2 * alpha;  // Green channel blend
-        data[index + 2] = b1 * (1 - alpha) + b2 * alpha;  // Blue channel blend
-        data[index + 3] = a1 * (1 - alpha) + a2 * alpha;  // Alpha channel blend
-    }
-
-    const texture = new THREE.DataTexture(data, width, height, THREE.RGBAFormat, THREE.FloatType);
-
-
+    // Create the 3D texture (size * size * depth)
+    const texture = new THREE.Data3DTexture(data, size, size, depth);
+    texture.format = THREE.RGBAFormat;
+    texture.type = THREE.FloatType;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
     texture.needsUpdate = true;
 
     return texture;
@@ -348,27 +310,26 @@ void main() {
 
     const visualizationShader = new THREE.ShaderMaterial({
         uniforms: {
-            my3DTexture: { value: null },
-            resolution: { value: new THREE.Vector3(10,10,10) }
+            uTexture3D: { value: null },
         },
-        vertexShader: `void main() {
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }`,
+        vertexShader: `varying vec3 vUv;
+
+void main() {
+    vUv = vec3(uv, 0.0);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`,
         // fragmentShader: document.getElementById('streaming').innerHTML // Your LBM streaming step logic
         fragmentShader: `
-uniform sampler3D my3DTexture;
-        uniform vec3 resolution;
+uniform sampler3D uTexture3D;
+varying vec3 vUv;
 
-        void main() {
-            // Normalize the texture coordinates based on the plane's position
-            vec3 texCoord = gl_FragCoord.xyz / resolution;
+void main() {
+    // Retrieve the distribution functions (stored in RGBA channels)
+    vec4 color1 = texture(uTexture3D, vUv);
+    vec4 color2 = texture(uTexture3D, vUv);
 
-            // Sample the 3D texture at the computed coordinates
-            vec4 texColor = texture(my3DTexture, texCoord);
-
-            // Output the sampled color
-            gl_FragColor = texColor;  // Just output the color from the texture
-        }
+    gl_FragColor = color1;
+}
 `
     });
     shadersDict["visualizationShader"] = visualizationShader;
@@ -406,15 +367,22 @@ function visualize(){
     displayMesh.material = shader;
     shader.uniforms.uTexture = currentRT.texture;
 
+    const renderTarget = new THREE.WebGLRenderTarget(10, 10);
+    renderTarget.texture.format = THREE.RGBAFormat;
+    renderTarget.texture.type = THREE.FloatType;
+    renderTarget.texture.minFilter = THREE.LinearFilter;
+    renderTarget.texture.magFilter = THREE.LinearFilter;
+
+    renderer.setRenderTarget(renderTarget);
+    renderer.render(displayScene, camera);
+
+    console.log((renderTarget.texture))
+    displayMesh.material = new THREE.MeshBasicMaterial({map: renderTarget.texture});
+
 }
 
 function displayInitial(){
-    // visualize();
-    const material = new THREE.MeshBasicMaterial({
-        map: createInitialTexture(), // In reality, you'd pass this to a shader
-        // wireframe: true // Optional: wireframe for visualization
-      });
-    displayMesh.material = material
+    visualize();
     // reset to screen framebuffer.
     renderer.setRenderTarget(null);
     renderer.render(displayScene, camera);
