@@ -39,8 +39,8 @@ function resetF() {
 }
 
 // create collisions
-let objectMask = tf.zeros([Ny, Nx])
-let objectMaskArr = objectMask.dataSync()
+let objectMask = null
+let objectMaskArr = null
 const grayValue = 128; // Gray level for R, G, B
 const alphaValue = 255; // Full opacity
 
@@ -85,7 +85,7 @@ const UICanvas = document.getElementById('UICanvas')
 
 
 const ctx = UICanvas.getContext('2d');
-console.log(ctx)
+// console.log(ctx)
 
 let intervalId = -1
 
@@ -125,7 +125,7 @@ function reset() {
     F.dispose()
     objectMask.dispose()
     F = resetF()
-    objectMask = tf.zeros([Ny, Nx])
+    objectMask = tf.tidy(() => { return tf.zeros([Ny, Nx]) })
     objectMaskArr = objectMask.arraySync()
     initialize_sim()
     renderer.render(scene, camera);
@@ -187,7 +187,7 @@ function drawCircle(event) {
         console.log(`Circle radius set to ${radius}. Adding circle to the mask.`);
         const cyl = createCylinderMask(circleCenter.x, circleCenter.y, radius);
         collisonAddObject(cyl)
-        cyl.dispose()
+
         // Reset adding mode
         isAddingCircle = false;
         circleCenter = null;
@@ -218,8 +218,8 @@ const circleOverlay = (event) => {
     const dx = mouseX - overlayCenter.x;
     const dy = mouseY - overlayCenter.y;
     const radius = Math.sqrt(dx * dx + dy * dy);
-    
-    
+
+
     // Clear the canvas and draw the circle
     ctx.clearRect(0, 0, UICanvas.width, UICanvas.height);
     drawTranslucentCircle(overlayCenter.x, overlayCenter.y, radius);
@@ -273,27 +273,29 @@ function initialize_sim() {
     const cylinderMask = createCylinderMask(Nx / 4, Ny / 2, Ny / 6)
 
     collisonAddObject(cylinderMask)
-    cylinderMask.dispose()
+
     // F
     if (debug) console.log("F before init: ", F.toString())
     // Assuming TensorFlow.js tensors and Nx, rho0, and idxs are predefined
 
     set_initial_conditions(initial_noise_flag)
 
+    let rho = null
+    const temp = tf.tidy(() => F.clone());
+    F.dispose()
     F = tf.tidy(() => {
         // Compute rho = sum(F, axis=2)
         // Compute rho and expand its dimensions
-        const rho = F.sum(2).expandDims(2);
+        rho = temp.sum(2).expandDims(2);
 
         // Scale all slices of F by rho0 / rho
-        const temp = F.mul(rho0).div(rho); // Scale the entire tensor
-        rho.dispose()
-        return temp
+        return temp.mul(rho0).div(rho)
     });
+    tf.dispose([rho, temp])
 
 
     if (debug) console.log("F init:", F.toString())
-    const rho = tf.tidy(() => { return F.sum(2) });
+    rho = tf.tidy(() => { return F.sum(2) });
     const ux = tf.tidy(() => { return F.mul(cxs).sum(2).div(rho) });
     const uy = tf.tidy(() => { return F.mul(cys).sum(2).div(rho) });
     if (debug) console.log(ux.toString(), uy.toString())
@@ -309,68 +311,82 @@ function initialize_sim() {
 }
 
 function set_initial_conditions(noiseFlag) {
+    let temp = tf.tidy(() => F.clone())
+    F.dispose()
+    let [baseTensor, mask, noise, leftwardBoost, initialBoostMask] = Array(5).fill(0)
     F = tf.tidy(() => {
 
         const noiseLevel = noiseFlag ? 0.5 : 0; // Scale of the random noise
         // console.log("noise: ", noiseLevel)
-        const initialBoostMask = createCylinderMask(Nx / 2, Ny / 2 - 10, Ny / 20)
+        initialBoostMask = createCylinderMask(Nx / 2, Ny / 2 - 10, Ny / 20)
 
         // Create the base tensor
-        const baseTensor = tf.tensor([0, -.25, 0, 0, 0, 0, 0, -.5, -1.5])
+        baseTensor = tf.tensor([0, -.25, 0, 0, 0, 0, 0, -.5, -1.5])
             .reshape([1, 1, 9])
             .tile([Ny, Nx, 1]);
 
         // Create a mask to isolate the 8th element (index 7)
-        const mask = tf.tensor([0, 1, 0, 0, 0, 0, 0, 1, 1])
+        mask = tf.tensor([0, 1, 0, 0, 0, 0, 0, 1, 1])
             .reshape([1, 1, 9])
             .tile([Ny, Nx, 1]);
 
         // Generate random noise for the 8th element
-        const noise = tf.randomUniform([Ny, Nx, 9], -noiseLevel, noiseLevel)
+        noise = tf.randomUniform([Ny, Nx, 9], -noiseLevel, noiseLevel)
             .mul(mask); // Apply the mask to restrict noise to the 8th element
 
         // Add the noise to the base tensor
-        const leftwardBoost = baseTensor.add(noise);
+        leftwardBoost = baseTensor.add(noise);
 
         // console.log(leftwardBoost.toString())
 
-        const tempF = F.add(leftwardBoost.where(initialBoostMask.expandDims(-1), tf.zerosLike(leftwardBoost)));
         // console.log(maskedBoost.toString())
-        tf.dispose([baseTensor, mask, noise, leftwardBoost, initialBoostMask])
 
-        return tempF
+        return temp.add(leftwardBoost.where(initialBoostMask.expandDims(-1), tf.zerosLike(leftwardBoost)));
     });
+
+    tf.dispose([temp, baseTensor, mask, noise, leftwardBoost, initialBoostMask])
     if (debug) console.log(F.toString())
 }
 
 function collisonAddObject(newObjectMask) {
+    if (!objectMask) {
+        objectMask = newObjectMask
+    }
+    const temp = objectMask.clone()
+    objectMask.dispose()
     objectMask = tf.tidy(() => {
-        return objectMask.add(newObjectMask).cast('bool')
+        return temp.add(newObjectMask).cast('bool')
     });
     objectMaskArr = objectMask.arraySync()
     if (debug) {
         console.log("New Object Mask: ", objectMaskArr)
     }
+
+    tf.dispose([newObjectMask,temp])
 }
 
 function createCylinderMask(centerX, centerY, radius) {
+    // console.log("# Tensors in mem pre cyl:", tf.memory().numTensors)
 
     // Create X and Y meshgrid
-    const X = tf.tile(tf.range(0, Nx).reshape([1, Nx]), [Ny, 1]); // Repeat for rows
-    const Y = tf.tile(tf.range(0, Ny).reshape([Ny, 1]), [1, Nx]); // Repeat for columns
+    const X = tf.tidy(() => { return tf.tile(tf.range(0, Nx).reshape([1, Nx]), [Ny, 1]) }); // Repeat for rows
+    const Y = tf.tidy(() => { return tf.tile(tf.range(0, Ny).reshape([Ny, 1]), [1, Nx]) }); // Repeat for columns
 
     // Cylinder boundary condition
+    let [xOffset, yOffset, radiusSquared] = [null, null, null]
     const cylinder = tf.tidy(() => {
-        const xOffset = X.sub(centerX); // X - Nx/4
-        const yOffset = Y.sub(centerY); // Y - Ny/2
-        const radiusSquared = tf.scalar(radius ** 2); // (Ny/4)^2
-        const cyl = xOffset.square().add(yOffset.square()).less(radiusSquared); // Check boundary
-        tf.dispose([xOffset, yOffset, radiusSquared])
-        return cyl
+        xOffset = X.sub(centerX); // X - Nx/4
+        yOffset = Y.sub(centerY); // Y - Ny/2
+        radiusSquared = tf.scalar(radius ** 2); // (Ny/4)^2
+
+        return xOffset.square().add(yOffset.square()).less(radiusSquared); // Check boundary
     });
+    tf.dispose([xOffset, yOffset, radiusSquared, X, Y])
 
     // Print the result as boolean array (optional for debug)
-    if (debug) cylinder.array().then(array => console.log("cylinder:", array));
+    if (debug) console.log("cylinder:", cylinder.arraySync());
+    // console.log("# Tensors in mem post cyl:", tf.memory().numTensors)
+
     return cylinder
 }
 
@@ -398,9 +414,11 @@ function simulate(total_steps) {
 
 async function updateSimulation(step) {
     if (debug) console.log("vis_intrv", VISUALIZATION_INTERVAL)
+    // console.log("# Tensors in mem pre full update:", tf.memory().numTensors)
 
     // Drift
     // Map and process all velocity components
+
     const shiftedF = cxs.map((cx, i) => {
         return tf.tidy(() => {
             let f = tf.gather(F, i, 2); // Slice a single component
@@ -409,11 +427,13 @@ async function updateSimulation(step) {
             return f.expandDims(2); // Expand dimensions to retain shape
         })
     });
+    F.dispose()
     F = tf.tidy(() => {
         // Concatenate along the last axis to combine all components
         return tf.concat(shiftedF, 2);
     });
     tf.dispose(shiftedF)
+
 
     // console.log("F post-drift:",F.toString())
 
@@ -422,24 +442,31 @@ async function updateSimulation(step) {
     // Step 1: Extract boundary data using the cylinder mask
 
     const maskIndices = await tf.whereAsync(objectMask); // Get indices where mask is true
+
+
     if (debug) console.log(maskIndices.toString(), F.toString())
     // Step 2: Reorder the velocity directions
+    let bndryF = null
     const reorderedBndryF = tf.tidy(() => {
-        const bndryF = tf.gatherND(F, maskIndices); // Extract rows corresponding to the mask
+        bndryF = tf.gatherND(F, maskIndices); // Extract rows corresponding to the mask
         // console.log(bndryF.toString())
         const reord = bndryF.gather([0, 5, 6, 7, 8, 1, 2, 3, 4], 1);
-        bndryF.dispose()
         return reord
     });
+    tf.dispose(bndryF)
+
 
     // Debugging: Print shape or values (optional)
     // reorderedBndryF.print();
     // Apply Collision
+    let tempclone = tf.tidy(() => F.clone())
+    F.dispose()
     F = tf.tidy(() => {
-        return tf.tensorScatterUpdate(F, maskIndices, reorderedBndryF)
+        return tf.tensorScatterUpdate(tempclone, maskIndices, reorderedBndryF)
     });
-    tf.dispose(reorderedBndryF)
+    tf.dispose([reorderedBndryF, maskIndices, tempclone])
 
+    // console.log("# Tensors in mem pre equilibrium:", tf.memory().numTensors)
     // Calculate fluid variables
     const rho = tf.tidy(() => { return F.sum(2) });
     const ux = tf.tidy(() => { return F.mul(cxs).sum(2).div(rho) });
@@ -450,35 +477,52 @@ async function updateSimulation(step) {
 
 
     // Equilibrium
+    // let final = null
     const we = weights.map((w, i) => {
         // console.log(w, i)
         return tf.tidy(() => {
-            const temp = rho.mul(tf.scalar(w))
-            const cAdded = ux.mul(tf.scalar(cxs[i])).add(uy.mul(tf.scalar(cys[i])))
-            const term0 = tf.scalar(1)
-            const term1 = cAdded.mul(tf.scalar(3))
-            const term2 = tf.scalar(9).mul(tf.pow(cAdded, 2)).div(tf.scalar(2))
-            const term3 = tf.scalar(3).mul((ux.square().add(uy.square()))).div(tf.scalar(2))
-            const tempops = term0.add(term1).add(term2).sub(term3)
-            const final = temp.mul(tempops)
-            tf.dispose([temp, cAdded, term0, term1, term2, term3, tempops])
-            return final
+            // const temp = rho.mul(tf.scalar(w))
+            // const cAdded = ux.mul(tf.scalar(cxs[i])).add(uy.mul(tf.scalar(cys[i])))
+            // const term0 = tf.scalar(1)
+            // const term1 = cAdded.mul(tf.scalar(3))
+            // const term2 = tf.scalar(9).mul(tf.pow(cAdded, 2)).div(tf.scalar(2))
+            // const term3 = tf.scalar(3).mul((ux.square().add(uy.square()))).div(tf.scalar(2))
+            // const tempops = term0.add(term1).add(term2).sub(term3)
+            // final = temp.mul(tempops)
+            // tf.dispose([temp, cAdded, term0, term1, term2, term3, tempops])
+            return rho.mul(tf.scalar(w)).mul(
+                tf.scalar(1)
+                    .add(ux.mul(tf.scalar(cxs[i])).add(uy.mul(tf.scalar(cys[i]))).mul(tf.scalar(3)))
+                    .add(tf.scalar(9).mul(tf.pow(ux.mul(tf.scalar(cxs[i])).add(uy.mul(tf.scalar(cys[i]))), 2)).div(tf.scalar(2)))
+                    .sub(tf.scalar(3).mul((ux.square().add(uy.square()))).div(tf.scalar(2)))
+            )
         });
     });
+    // console.log("# Tensors in mem post we:", tf.memory().numTensors)
+
     const Feq = tf.tidy(() => {
         // console.log("weights", we.toString());
         return tf.stack(we, 2);
     });
-    tf.dispose(we)
+    // console.log("# Tensors in mem post feq:", tf.memory().numTensors)
+
     // console.log("feq", Feq.toString())
     // console.log("F precol:", F.toString())
-    F = tf.tidy(() => { return F.add(F.sub(Feq).mul(-1.0 / tau)) });
-    tf.dispose(Feq)
+    let temp = tf.tidy(() => F.clone())
+    F.dispose()
+    F = tf.tidy(() => { return temp.add(temp.sub(Feq).mul(-1.0 / tau)) });
+    tf.dispose(we)
+    // console.log("# Tensors in mem post we disp:", tf.memory().numTensors)
+    tf.dispose([Feq, temp])
+    // console.log("# Tensors in mem post other disp (pre visualization):", tf.memory().numTensors)
+
     if (debug) console.log("F postcol:", F.toString())
 
     if (debug) console.log("step vis_int:", step, VISUALIZATION_INTERVAL)
     // Visualization
     if (step % VISUALIZATION_INTERVAL === 0) {
+        console.log("# Tensors in mem pre vis:", tf.memory().numTensors)
+
         console.log("Visualizing step ", step)
         if (VISUALIZATION_MODE === "vorticity") {
             visualArr = getNormalizedVorticity(ux, uy)
@@ -488,10 +532,13 @@ async function updateSimulation(step) {
             visualize()
 
         }
+        console.log("# Tensors in mem post vis:", tf.memory().numTensors)
 
     }
 
     tf.dispose([rho, ux, uy])
+    // console.log("# Tensors in mem post full update:", tf.memory().numTensors)
+
 }
 
 
@@ -516,36 +563,40 @@ function tfRoll(tensor, shift, axis) {
 }
 
 function getNormalizedVorticity(ux, uy) {
-    return tf.tidy(() => {
-        const canceledUx = tf.zerosLike(ux).where(objectMask, ux)
-        const canceledUy = tf.zerosLike(uy).where(objectMask, uy)
-        const dxVy = tfRoll(canceledUx, -1, 0).sub(tfRoll(canceledUx, 1, 0))
-        const dyVx = tfRoll(canceledUy, -1, 1).sub(tfRoll(canceledUy, 1, 1))
-        const vorticity = dxVy.sub(dyVx)
-        const temp = tf.fill(vorticity.shape, NaN).where(objectMask, vorticity)
-        tf.dispose([canceledUx, canceledUy, dxVy, dyVx, vorticity])
-        return temp;
-    }).arraySync();
+    let [canceledUx, canceledUy, dxVy, dyVx, vorticity] = Array(5).fill(null)
+    const temp = tf.tidy(() => {
+        canceledUx = tf.zerosLike(ux).where(objectMask, ux)
+        canceledUy = tf.zerosLike(uy).where(objectMask, uy)
+        dxVy = tfRoll(canceledUx, -1, 0).sub(tfRoll(canceledUx, 1, 0))
+        dyVx = tfRoll(canceledUy, -1, 1).sub(tfRoll(canceledUy, 1, 1))
+        vorticity = dxVy.sub(dyVx)
+        return tf.fill(vorticity.shape, NaN).where(objectMask, vorticity)
+
+    })
+    const temparr = temp.arraySync();
+    tf.dispose([canceledUx, canceledUy, dxVy, dyVx, vorticity, temp])
+    return temparr
 }
 
 function getNormalizedVel(ux, uy) {
 
     // console.log("velocs: ", velocityMagnitude.toString())
-
-    return tf.tidy(() => {
-        const velocityMagnitude = ux.square().add(uy.square()).sqrt();
-        const min = velocityMagnitude.min();
-        const max = velocityMagnitude.max();
+    let [velocityMagnitude, min, max] = [null, null, null]
+    const temp = tf.tidy(() => {
+        velocityMagnitude = ux.square().add(uy.square()).sqrt();
+        min = velocityMagnitude.min();
+        max = velocityMagnitude.max();
         // console.log(min.toString(), max.toString())
-        const normed = tf.where(
+
+        return tf.where(
             min.equal(max),
             tf.zerosLike(velocityMagnitude), // All zeros if min == max
             velocityMagnitude.sub(min).div(max.sub(min)) // Normalize
         );
-
-        tf.dispose([min, max, velocityMagnitude])
-        return normed
-    }).arraySync()
+    })
+    const tempArr = tf.tidy(() => temp.arraySync())
+    tf.dispose([min, max, velocityMagnitude, temp])
+    return tempArr
 }
 
 // Visualization using THREE.js
