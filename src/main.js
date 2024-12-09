@@ -9,14 +9,16 @@ const initial_noise_flag = true
 
 // texture updates every SIMINTRV * VISINTRV / 1000 seconds
 // 1000 / SIMINTRV * VISINTRV  updates every second
-let SIMULATION_INTERVAL = 100 //milliseconds. 10 iterations per second
-let VISUALIZATION_INTERVAL = 2 // update texture every 5 iterations. 2 per second
+let SIMULATION_INTERVAL = 250 //milliseconds. 10 iterations per second
+let VISUALIZATION_INTERVAL = 40 // update texture every 5 iterations. 2 per second
+let RUNTIME_INTERVAL = 10
 // let VISUALIZATION_MODE = "vorticity"
 let VISUALIZATION_MODE = "velocity"
 let step = 0
+
 // Simulation parameters
-const Nx = 100; // resolution x-dir
-const Ny = 100; // resolution y-dir
+const Nx = Ny = 50; // resolution x-dir, y-dir
+
 const rho0 = 100; // average density
 const tau = 1.8; // collision timescale
 const Nt = 1000; // number of timesteps. simulation will take Nt * SIM_INT / 1000 seconds
@@ -76,8 +78,26 @@ const addCircleButton = document.getElementById('addCircleButton');
 let isAddingCircle = false;
 let circleCenter = null;
 let overlayCenter = null;
+
 const instructionBox = document.getElementById('instructionBox');
 
+const performanceDisp = document.getElementById('performanceIndicator');
+let runtimes = Array(RUNTIME_INTERVAL).fill(0)
+let avgRuntimes = []
+
+const memInd = document.getElementById('memInd');
+function updateMemInd(){
+    let msg = `Memory Usage: ${(tf.memory().numBytes / 1024).toFixed(2)}  KB`
+    console.log(msg)
+    memInd.textContent = msg
+}
+
+const stepCounter = document.getElementById('stepCounter');
+stepCounter.textContent = `Step ${step} / ${Nt}`
+function updateStep(val){
+    step = val
+    stepCounter.textContent = `Step ${step} / ${Nt}`;
+}
 
 const canvContainer = document.getElementById('canvasContainer')
 const simCanvas = document.getElementById('fluidCanvas')
@@ -118,10 +138,11 @@ resetButton.addEventListener('click', () => {
 });
 function reset() {
     clearInterval(intervalId)
-    step = 0
+    updateStep(0)
     isPaused = true
     pauseButton.disabled = true
     startButton.disabled = false
+    performanceDisp.textContent = "Average time per step (over last 100 steps): -- ms"
     F.dispose()
     objectMask.dispose()
     F = resetF()
@@ -137,7 +158,7 @@ advanceButton.addEventListener('click', async () => {
 async function advance() {
     const tempInt = VISUALIZATION_INTERVAL
     VISUALIZATION_INTERVAL = 1
-    step += 1
+    updateStep(step + 1)
     await updateSimulation(step);
     VISUALIZATION_INTERVAL = tempInt
 }
@@ -308,6 +329,8 @@ function initialize_sim() {
     }
 
     tf.dispose([rho, ux, uy])
+    
+    updateMemInd()
 }
 
 function set_initial_conditions(noiseFlag) {
@@ -401,15 +424,19 @@ function simulate(total_steps) {
         //     step += 1
         //     updateSimulation(step);
         // }
-        step += 1
-        updateSimulation(step);
+        await updateSimulation(step);
+        updateStep(step + 1)
         if (step === total_steps) {
             clearInterval(intervalId)
             isPaused = true
             pauseButton.disabled = true
             startButton.disabled = true
+            let avg = avgRuntimes.reduce((acc, val) => acc + val, 0) / avgRuntimes.length
+            performanceDisp.textContent = `Average time per step (over full simulation): ${avg.toFixed(2)} ms`
         }
     }, SIMULATION_INTERVAL); // Update every second
+
+
 }
 
 async function updateSimulation(step) {
@@ -418,7 +445,7 @@ async function updateSimulation(step) {
 
     // Drift
     // Map and process all velocity components
-
+    const startTime = performance.now()
     const shiftedF = cxs.map((cx, i) => {
         return tf.tidy(() => {
             let f = tf.gather(F, i, 2); // Slice a single component
@@ -521,9 +548,9 @@ async function updateSimulation(step) {
     if (debug) console.log("step vis_int:", step, VISUALIZATION_INTERVAL)
     // Visualization
     if (step % VISUALIZATION_INTERVAL === 0) {
-        console.log("# Tensors in mem pre vis:", tf.memory().numTensors)
+        // console.log("# Tensors in mem pre vis:", tf.memory().numTensors)
 
-        console.log("Visualizing step ", step)
+        // console.log("Visualizing step ", step)
         if (VISUALIZATION_MODE === "vorticity") {
             visualArr = getNormalizedVorticity(ux, uy)
             visualize()
@@ -532,13 +559,28 @@ async function updateSimulation(step) {
             visualize()
 
         }
-        console.log("# Tensors in mem post vis:", tf.memory().numTensors)
+        // console.log("# Tensors in mem post vis:", tf.memory().numTensors)
 
     }
 
     tf.dispose([rho, ux, uy])
     // console.log("# Tensors in mem post full update:", tf.memory().numTensors)
+    const exTime = performance.now() - startTime
+    if (step % RUNTIME_INTERVAL === 0) {
+        updatePerfDisp()
+        
+        updateMemInd()
+    }
+    runtimes[step % RUNTIME_INTERVAL] = exTime
+}
 
+function updatePerfDisp() {
+    let sum = runtimes.reduce((acc, val) => acc + val, 0)
+    let avg = (sum / runtimes.length)
+    avgRuntimes.push(avg)
+    console.log(`${step}. Average time per step (over last ${RUNTIME_INTERVAL} steps): ${avg.toFixed(2)} ms `)
+    performanceDisp.textContent = `Average time per step (over last ${RUNTIME_INTERVAL} steps): ${avg.toFixed(2)} ms `; // Update the text content
+    runtimes.length = 0
 }
 
 
