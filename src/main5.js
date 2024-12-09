@@ -113,8 +113,8 @@ function createInitialTexture() {
                 let index = (z * size * size + y * size + x) * 4;
     
                 // Example: random colors for each texel
-                data[index] = Math.random();      // Red
-                data[index + 1] = 0.0;  // Green
+                data[index] = 0.0;      // Red
+                data[index + 1] = Math.random();  // Green
                 data[index + 2] = 0.0;  // Blue
                 data[index + 3] = 1.0;            // Alpha (fully opaque)
             }
@@ -354,9 +354,7 @@ function simulateAll(){
     // simulateSingleShader("shaderMultiply");
     // simulateSingleShader("shaderInvert");
     simulateSingleShader("boundaryShader");
-    console.log("first", currentRT.texture);
-    simulateSingleShader("collisionShader");
-    console.log(currentRT.texture);
+    // simulateSingleShader("collisionShader");
     // simulateSingleShader("streamingShader");
     simulateSingleShader("visualizationShader");
     //final output in currentRT since the last target was nextRT and it's data was moved to currentRT
