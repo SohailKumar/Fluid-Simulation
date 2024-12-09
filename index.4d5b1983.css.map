@@ -1,0 +1,1 @@
+{"mappings":"ACAA,mBAIA","sources":["index.4d5b1983.css","src/styles.css"],"sourcesContent":["body {\n  margin: 5% 10%;\n}\n\n#project-plan {\n  margin: 10% 0 0;\n}\n/*# sourceMappingURL=index.4d5b1983.css.map */\n","body {\r\n    margin: 5% 10% 5% 10%;\r\n}\r\n\r\n#project-plan{\r\n    margin: 10% 0 0 0\r\n}\r\n"],"names":[],"version":3,"file":"index.4d5b1983.css.map"}
