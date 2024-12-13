@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fluid Simulation</title>
+    <link rel="stylesheet" href="simStyles.css">
+    <!-- <link rel="icon" href="/images/favicon.png" type="image/png"> -->
+</head>
+
+<body>
+	<p style="color:black;"">
+        <a href="index.html">Home Page</a>
+	</p>
+	<p style="color:black;"">
+Although multiple rendertargets do not work, the code for this(on our github under mainShader.js) should allow you to see the general set-up 
+for shaders through rendertargets with single outputs. 
+<br>The simulation below has two shaders: invert and visualize. If you press "step", you will see 
+the invert shader invert colors and the visualization shader average values around each pixel(it does both at once)
+<br>Pressing "isSimulationRunning" will run this continuously but depending on how fast it does so, this may result in flashing images.
+    </p>
+	
+    <canvas id="fluidCanvas"></canvas>
+	<script type="module">
+	</script>
+
+    <script src="./mainShader.js" type="module"></script>
+	<script id="multiply" type="x-shader/x-fragment">
+		uniform image2D uTexture;
+
+		void main() {
+			vec4 color = texture2D(uTexture, gl_FragCoord.xy / vec2(128, 128));
+			gl_FragColor = color * vec4(0.5, 1.0, 0.5, 1.0); // Multiply color by greenish color
+		}
+	</script>
+	
+	<script id="invert" type="x-shader/x-fragment">
+		uniform sampler2D uTexture;
+
+		void main() {
+			vec4 color = texture2D(uTexture, gl_FragCoord.xy / vec2(128, 128));  // assuming 512x512 texture resolution
+			gl_FragColor = vec4(1.0 - color.rgb, 1.0);  // Invert the color
+		}
+	</script>
+
+	<script id ="boundary" type="x-shader/x-fragment">
+		uniform sampler2D uTexture;   // The distribution function texture
+		varying vec2 vUv;
+		
+		void main() {
+			vec4 f = texture2D(uTexture, vUv);      // Fetch distribution function at this point
+		
+			// Apply no-slip boundary condition (do nothing at boundary)
+			if (f.b > 0.5) {
+				// Do nothing to the distribution function at the boundary
+				// The distribution function remains unchanged at the boundary
+				// f = f;  // This line is redundant but included for clarity
+			}
+		
+			// Output the (potentially unchanged) distribution functions
+			gl_FragColor = f;
+		}
+	</script>
+
+	<script id="streaming" type="x-shader/x-fragment">
+		uniform sampler2D uTexture;
+		varying vec2 vUv;
+
+		void main() {
+			vec4 f = texture2D(uTexture, vUv);
+
+			// Streaming step: shift the distribution functions based on lattice directions
+			// (For simplicity, we're using a shift for demonstration; you'll need to modify it for D2Q9 model)
+			vec2 shift = vec2(0.01, 0.0); // Example shift
+			vec4 shiftedF = texture2D(uTexture, vUv + shift);
+
+			gl_FragColor = shiftedF; // Output the shifted distribution functions (no color output yet)
+		}		
+	</script>
+
+	<script id="collision" type="x-shader/x-fragment">
+		uniform sampler2D uTexture;
+		uniform float tau; // Relaxation time
+		varying vec2 vUv;
+
+		void main() {
+			vec4 f = texture2D(uTexture, vUv);
+
+			// Simple BGK collision (relax distribution function to equilibrium)
+			float rho = 0.0;
+			for ( int i = -1; i <= 1; ++i ) {
+				for ( int j = -1; j <= 1; ++j ) {
+					vec2 pos = clamp(vUv + vec2(float(i), float(j)), 0.0, 1.0);
+					vec4 colorsIJ = texture2D(uTexture, pos); 
+					rho += colorsIJ.r;
+				}
+			}
+			rho /= 9.0; // Normalize rho
+			
+			if(f.b > 0.5){
+				rho = 0.0;
+				gl_FragColor = f;
+			}else{
+				// vec4 equilibrium = vec4(rho * 0.25); // Simplified equilibrium distribution TODO make complex
+				float equilibrium = rho * 0.25;
+
+				// Relax the distribution functions towards equilibrium
+				f.r = f.r + (equilibrium - f.r) / tau; //1/tau is omega
+
+				gl_FragColor = f; // Output the updated distribution functions (no color output yet)
+			}
+		}
+	</script>
+	
+</body>
+
+</html>

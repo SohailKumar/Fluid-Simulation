@@ -4,7 +4,7 @@ Jack McLaughlin
 Sohail Kumar
 
 ## Description
-This project demonstrates different fluid simulation algorithms and provides a comparative analysis
+This project demonstrates different fluid simulation algorithms and provides a comparative analysis.=
 
 ## Usage
 ### Development
