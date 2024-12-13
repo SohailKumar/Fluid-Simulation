@@ -158,6 +158,10 @@ function createInitialTexture() {
         data[index + 3] = a1 * (1 - alpha) + a2 * alpha;  // Alpha channel blend
     }
 
+    const combined = new Float32Array(data.length * 2);
+    combined.set(data);
+    combined.set(data, data.length);
+
     const texture = new THREE.DataTexture(data, width, height, THREE.RGBAFormat, THREE.FloatType);
     texture.needsUpdate = true;
 
