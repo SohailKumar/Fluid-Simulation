@@ -80,7 +80,8 @@ let circleCenter = null;
 let overlayCenter = null;
 
 const instructionBox = document.getElementById('instructionBox');
-
+const gridSizeText = document.getElementById('gridSize');
+gridSizeText.textContent = `${Ny}x${Nx} grid`
 const performanceDisp = document.getElementById('performanceIndicator');
 let runtimes = Array(RUNTIME_INTERVAL).fill(0)
 let avgRuntimes = []

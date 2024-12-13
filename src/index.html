@@ -12,7 +12,9 @@
 <body>
     <script src="./main.js" type="module"></script>
     <section>
-
+        <div>
+            <em id="gridSize">--</em>
+        </div>
         <div id="canvasContainer" style="position: static;">
             <canvas id="fluidCanvas" style="position: absolute;"></canvas>
             <canvas id="UICanvas" style="position: absolute;"></canvas>
@@ -47,9 +49,46 @@
             </p>
         </section>
 
-        <section id="problem-domain">
+
+        <section>
             <h2>Problem Domain</h2>
-            <em>To be filled out.</em>
+            <p>The importance of finding an optimal solution depends on the application:</p>
+            <ul>
+                <li><strong>Engineering:</strong> Critical for improving designs in aerospace, automotive, and renewable
+                    energy, where efficiency, safety, and performance are paramount.</li>
+                <li><strong>Manufacturing:</strong> Essential for reducing defects and optimizing processes like
+                    casting, molding, and chemical mixing.</li>
+                <li><strong>Games and VFX:</strong> Realism and computational efficiency are more important than strict
+                    optimality, enabling engaging interactions and lifelike animations.</li>
+            </ul>
+            <p>Optimal solutions are vital for technical accuracy in engineering and manufacturing but less so in
+                creative domains like entertainment.</p>
+        </section>
+
+
+        <section>
+            <h2>Inputs and Outputs</h2>
+            <h3>Inputs</h3>
+            <ul>
+                <li>Initial state
+                    <ul>
+                        <li>Size of grid</li>
+                        <li>Random noise of velocity</li>
+                        <li>Initial significant velocity of some particles <em>(white circle)</em></li>
+                        <li>Collidable geometry mask. Initial circle object.</li>
+                    </ul>
+                </li>
+                <li>Live User input
+                    <ul>
+                        <li>Adding collidable geometry</li>
+                    </ul>
+                </li>
+            </ul>
+            <h3>Outputs</h3>
+            <ul>
+                <li>Velocity at each lattice site</li>
+                <li>Simulation runs for certain number of timesteps</li>
+            </ul>
         </section>
 
         <section id="algorithm-description">
@@ -88,8 +127,7 @@
                     </ul>
                 </li>
             </ul>
-            <p><em>Note: A distribution function f_i represents the probability of finding a particle moving in a
-                    specific direction i at that lattice point.</em></p>
+
 
             <h3 id="streaming">Streaming</h3>
             <p>For each cell in the grid:</p>
