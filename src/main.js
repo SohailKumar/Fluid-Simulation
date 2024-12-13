@@ -9,8 +9,8 @@ const initial_noise_flag = true
 
 // texture updates every SIMINTRV * VISINTRV / 1000 seconds
 // 1000 / SIMINTRV * VISINTRV  updates every second
-let SIMULATION_INTERVAL = 250 //milliseconds. 10 iterations per second
-let VISUALIZATION_INTERVAL = 40 // update texture every 5 iterations. 2 per second
+let SIMULATION_INTERVAL = 100 //milliseconds. 10 iterations per second
+let VISUALIZATION_INTERVAL = 2 // update texture every 5 iterations. 2 per second
 let RUNTIME_INTERVAL = 10
 // let VISUALIZATION_MODE = "vorticity"
 let VISUALIZATION_MODE = "velocity"

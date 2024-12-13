@@ -12,6 +12,7 @@
 <body>
     <script src="./main.js" type="module"></script>
     <section>
+        <h1>Live Simulation <em>(no shaders)</em></h1>
         <div>
             <em id="gridSize">--</em>
         </div>
@@ -113,6 +114,7 @@
             <p>Set fluid relaxation time (tau)</p>
             <p>Set speed of sound (cs)</p>
             <p>Define lattice velocity vectors (9 directions for D2Q9 model)</p>
+            <p>Time complexity of this step: O(NxMx9)=O(NxM)</p>
 
             <h3 id="collision-step">Collision Step</h3>
             <p>For each cell in the grid:</p>
@@ -127,6 +129,7 @@
                     </ul>
                 </li>
             </ul>
+            <p>Time complexity of this step: O(NxMx9)=O(NxM)</p>
 
 
             <h3 id="streaming">Streaming</h3>
@@ -138,9 +141,10 @@
                     </ul>
                 </li>
             </ul>
+            <p>Time complexity of this step: O(NxMx9)=O(NxM)</p>
 
             <h3 id="handle-boundaries">Handle Boundaries</h3>
-            <p>For each boundary cell:</p>
+            <p>For each boundary cell (could be entire grid):</p>
             <ul>
                 <li>Apply no-slip boundary conditions:
                     <ul>
@@ -153,12 +157,14 @@
                     </ul>
                 </li>
             </ul>
+            <p>Time complexity of this step: O(NxM), worst case is that entire grid is covered in objects.</p>
 
             <h3 id="update-macroscopic">Update Macroscopic Cell Variables</h3>
             <p>For each cell in the grid:</p>
             <ul>
                 <li>Compute macroscopic velocity and density from the new distribution functions</li>
             </ul>
+            <p>Time complexity of this step: O(NxM)</p>
 
             <h3 id="render">Render</h3>
             <p>For each cell in the grid:</p>
@@ -167,12 +173,23 @@
                 <li>Update the position of particles or arrows based on velocity direction</li>
                 <li>Render the scene using Three.js</li>
             </ul>
+            <p>Time complexity of this step: O(NxM)</p>
         </section>
 
-        <section id="time-complexity-analysis">
-            <h2>Time Complexity Analysis</h2>
-            <em>To be filled out.</em>
+
+        <section>
+            <h2>Time Complexity Analysis - Non-shader algorithm</h2>
+            <ul>
+                <li><strong>Initialization:</strong> <code>O(N &times; M)</code></li>
+                <li><strong>Collision Step:</strong> <code>O(N &times; M)</code></li>
+                <li><strong>Streaming:</strong> <code>O(N &times; M)</code></li>
+                <li><strong>Handle Boundaries:</strong> <code>O(N + M)</code></li>
+                <li><strong>Update Macroscopic Variables:</strong> <code>O(N &times; M)</code></li>
+            </ul>
+            <p>The overall complexity for a single timestep is dominated by <code>O(N &times; M)</code>, as boundary
+                handling is typically a minor contribution.</p>
         </section>
+
     </section>
 
     <h2>References</h2>
