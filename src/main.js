@@ -46,6 +46,7 @@ gridResolutionSlider.addEventListener('change', () => {
     // You can use the value here to update your fluid simulation
     console.log('Grid Resolution:', Ny);
     gridSizeText.textContent = `${Ny}x${Nx} grid`
+    resetTexture()
     reset()
 });
 gridResolutionSlider.addEventListener('input', () => {
@@ -184,7 +185,7 @@ function reset() {
     gridResolutionSlider.disabled = false
     totalTimestampsSlider.disabled = false
     performanceDisp.textContent = "Average time per step (over last 100 steps): -- ms"
-    resetTexture()
+    
     F.dispose()
     objectMask.dispose()
     F = resetF()
