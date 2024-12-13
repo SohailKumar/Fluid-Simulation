@@ -2,6 +2,18 @@ body {
     margin: 5% 10% 5% 10%;
 }
 
+#outerSim {
+    display: flex;
+    flex-direction: row;  /* Arrange children side by side */
+    justify-content: flex-start;  /* Align items to the left */
+    align-items: flex-start;  /* Align items at the top */
+
+}
+
+#controls {
+    margin: 20px;
+}
+
 #project-plan{
     margin: 10% 0 0 0
 }

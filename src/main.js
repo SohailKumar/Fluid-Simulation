@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import * as tf from '@tensorflow/tfjs';
 
 //DEBUG FLAG
-const debug = false;
+const debug = true;
 
 const initial_noise_flag = true
 
@@ -15,13 +15,19 @@ let RUNTIME_INTERVAL = 10
 // let VISUALIZATION_MODE = "vorticity"
 let VISUALIZATION_MODE = "velocity"
 let step = 0
+// Get references to the input elements and value displays
+const gridResolutionSlider = document.getElementById('gridResolution');
+const totalTimestampsSlider = document.getElementById('totalTimestamps');
+const gridResolutionValueDisplay = document.getElementById('gridResolutionValue');
+const totalTimestampsValueDisplay = document.getElementById('totalTimestampsValue');
+
 
 // Simulation parameters
-const Nx = Ny = 50; // resolution x-dir, y-dir
+let Nx = Ny = 50; // resolution x-dir, y-dir
 
 const rho0 = 100; // average density
 const tau = 1.8; // collision timescale
-const Nt = 1000; // number of timesteps. simulation will take Nt * SIM_INT / 1000 seconds
+let Nt = 100; // number of timesteps. simulation will take Nt * SIM_INT / 1000 seconds
 
 const randSeed = 123
 
@@ -32,11 +38,39 @@ const cxs = [0, 0, 1, 1, 1, 0, -1, -1, -1];
 const cys = [0, 1, 1, 0, -1, -1, -1, 0, 1];
 const weights = [4 / 9, 1 / 9, 1 / 36, 1 / 9, 1 / 36, 1 / 9, 1 / 36, 1 / 9, 1 / 36];
 
+// Update the grid resolution and display value when slider changes
+gridResolutionSlider.addEventListener('change', () => {
+    gridResolution = gridResolutionSlider.value;
+    gridResolutionValueDisplay.textContent = gridResolution;
+    Ny = Nx = parseInt(gridResolution)
+    // You can use the value here to update your fluid simulation
+    console.log('Grid Resolution:', Ny);
+    gridSizeText.textContent = `${Ny}x${Nx} grid`
+    reset()
+});
+gridResolutionSlider.addEventListener('input', () => {
+    gridResolutionValueDisplay.textContent = gridResolutionSlider.value;
+});
+
+// Update the total timestamps and display value when slider changes
+totalTimestampsSlider.addEventListener('change', () => {
+    totalTimestamps = totalTimestampsSlider.value;
+    totalTimestampsValueDisplay.textContent = totalTimestamps;
+    Nt = parseInt(totalTimestamps)
+    // You can use the value here to update your fluid simulation
+    console.log('Total Timestamps:', Nt);
+    reset()
+});
+totalTimestampsSlider.addEventListener('input', () => {
+    totalTimestampsValueDisplay.textContent = totalTimestampsSlider.value;
+});
+
 // Initialize simulation variables
 // console.log("inits:",ones.toString(), rand.toString())
 let F = resetF()
 
 function resetF() {
+    console.log(Ny,Nx,NL)
     return tf.tidy(() => { return tf.ones([Ny, Nx, NL]).add(tf.randomNormal([Ny, Nx, NL], 0, 0.01, 'float32', randSeed)) });
 }
 
@@ -100,6 +134,8 @@ function updateStep(val){
     stepCounter.textContent = `Step ${step} / ${Nt}`;
 }
 
+
+
 const canvContainer = document.getElementById('canvasContainer')
 const simCanvas = document.getElementById('fluidCanvas')
 const UICanvas = document.getElementById('UICanvas')
@@ -119,6 +155,8 @@ function start() {
     isPaused = false;
     startButton.disabled = true
     pauseButton.disabled = false
+    gridResolutionSlider.disabled = true
+    totalTimestampsSlider.disabled = true
     if (debug) console.log("paused", isPaused)
     simulate(Nt)
 }
@@ -138,17 +176,20 @@ resetButton.addEventListener('click', () => {
     reset()
 });
 function reset() {
-    clearInterval(intervalId)
+    if (intervalId>-1) clearInterval(intervalId)
     updateStep(0)
     isPaused = true
     pauseButton.disabled = true
     startButton.disabled = false
+    gridResolutionSlider.disabled = false
+    totalTimestampsSlider.disabled = false
     performanceDisp.textContent = "Average time per step (over last 100 steps): -- ms"
     F.dispose()
     objectMask.dispose()
     F = resetF()
     objectMask = tf.tidy(() => { return tf.zeros([Ny, Nx]) })
     objectMaskArr = objectMask.arraySync()
+    //console.log(F.toString(), objectMaskArr)
     initialize_sim()
     renderer.render(scene, camera);
 }
@@ -323,6 +364,7 @@ function initialize_sim() {
     if (debug) console.log(ux.toString(), uy.toString())
     if (VISUALIZATION_MODE === "velocity") {
         visualArr = getNormalizedVel(ux, uy)
+        
         visualize()
     } else if (VISUALIZATION_MODE === "vorticity") {
         visualArr = getNormalizedVorticity(ux, uy)
@@ -330,7 +372,7 @@ function initialize_sim() {
     }
 
     tf.dispose([rho, ux, uy])
-    
+    console.log(objectMaskArr)
     updateMemInd()
 }
 
@@ -648,7 +690,7 @@ function visualize() {
 
     // console.log("visualization values:", visualArr)
     if (debug) console.log("objects", objectMaskArr)
-
+    console.log(Ny,Nx)
     for (let y = 0; y < Ny; y++) {
         for (let x = 0; x < Nx; x++) {
 
