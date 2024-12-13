@@ -54,42 +54,81 @@
 
         <section id="algorithm-description">
             <h2>Algorithm Description</h2>
-            <div class="pseudocode">
-                <h3>Pseudocode</h3>
-                <pre>
-While simulation is running:
-    Collision step (Relaxation)
-    Streaming step (Propagate to neighboring cells)
-    Apply boundary conditions
-    Update macroscopic velocity and density
-    Render the updated fluid field using Three.js
-            </pre>
-            </div>
+            <h3 id="overview">Overview</h3>
+            <p>While simulation is running:</p>
+            <ul>
+                <li><a href="#collision-step">Collision step (Relaxation)</a></li>
+                <li><a href="#streaming">Streaming step (Propagate to neighboring cells)</a></li>
+                <li><a href="#handle-boundaries">Apply boundary conditions</a></li>
+                <li><a href="#update-macroscopic">Update macroscopic velocity and density</a></li>
+                <li><a href="#render">Render the updated fluid field using Three.js</a></li>
+            </ul>
 
-            <div class="parallelization">
-                <h3>Parallelization</h3>
-                <ul>
-                    <li>
-                        <strong>Use Textures to Represent Fluid State:</strong> WebGL textures store the fluid’s
-                        velocity distribution functions (<em>f<sub>i</sub></em>). Each pixel in the texture represents a
-                        grid cell, with color values (RGBA channels) encoding the fluid state (velocity, density, etc.).
-                    </li>
-                    <li>
-                        <strong>Fragment Shader for Parallel Computation:</strong> The LBM collision and streaming steps
-                        are implemented as a fragment shader. WebGL’s parallel fragment processing allows computation of
-                        the fluid simulation across the entire grid simultaneously.
-                    </li>
-                    <li>
-                        <strong>Render to Textures:</strong> Instead of rendering directly to the screen, simulation
-                        results are rendered to a texture using a framebuffer object. This enables updating the fluid
-                        state for the next time step efficiently.
-                    </li>
-                    <li>
-                        <strong>Use Three.js to Visualize:</strong> After each simulation step, Three.js is used to
-                        visualize the updated fluid state by rendering the texture or particles.
-                    </li>
-                </ul>
-            </div>
+            <h3 id="initialization">Initialization</h3>
+            <p>Initialize lattice grid with dimensions NxM</p>
+            <p>For each cell in the grid:</p>
+            <ul>
+                <li>Initialize fluid density and velocity distribution (9 velocity directions for 2D)</li>
+                <li>Apply boundary conditions (walls, inlets, outlets)</li>
+            </ul>
+            <p>Set fluid relaxation time (tau)</p>
+            <p>Set speed of sound (cs)</p>
+            <p>Define lattice velocity vectors (9 directions for D2Q9 model)</p>
+
+            <h3 id="collision-step">Collision Step</h3>
+            <p>For each cell in the grid:</p>
+            <ul>
+                <li>Compute macroscopic density (rho) and velocity (u) from the distribution functions</li>
+                <li>For each velocity direction:
+                    <ul>
+                        <li>Compute equilibrium distribution function (f_eq)</li>
+                        <li>Relax towards equilibrium:
+                            <pre>f_i_new = f_i_old + (f_eq - f_i_old) / tau</pre>
+                        </li>
+                    </ul>
+                </li>
+            </ul>
+            <p><em>Note: A distribution function f_i represents the probability of finding a particle moving in a
+                    specific direction i at that lattice point.</em></p>
+
+            <h3 id="streaming">Streaming</h3>
+            <p>For each cell in the grid:</p>
+            <ul>
+                <li>For each velocity direction:
+                    <ul>
+                        <li>Move distribution function to neighboring cell in the direction of the velocity vector</li>
+                    </ul>
+                </li>
+            </ul>
+
+            <h3 id="handle-boundaries">Handle Boundaries</h3>
+            <p>For each boundary cell:</p>
+            <ul>
+                <li>Apply no-slip boundary conditions:
+                    <ul>
+                        <li>Reverse the velocity at the wall (bounce-back)</li>
+                    </ul>
+                </li>
+                <li>Apply periodic boundaries (if necessary):
+                    <ul>
+                        <li>Wrap fluid from one side to the other</li>
+                    </ul>
+                </li>
+            </ul>
+
+            <h3 id="update-macroscopic">Update Macroscopic Cell Variables</h3>
+            <p>For each cell in the grid:</p>
+            <ul>
+                <li>Compute macroscopic velocity and density from the new distribution functions</li>
+            </ul>
+
+            <h3 id="render">Render</h3>
+            <p>For each cell in the grid:</p>
+            <ul>
+                <li>Compute the color or size of a particle based on the density or velocity magnitude</li>
+                <li>Update the position of particles or arrows based on velocity direction</li>
+                <li>Render the scene using Three.js</li>
+            </ul>
         </section>
 
         <section id="time-complexity-analysis">
@@ -97,18 +136,6 @@ While simulation is running:
             <em>To be filled out.</em>
         </section>
     </section>
-
-    <section id="project-plan"> </section>
-    <h1>Project Plan</h1>
-    <p>We are going to create a web-based fluid simulator using WebGL and Three.js. We plan to implement fluid
-        simulation using two different methods, and then we can compare their visual quality, performance, and ease of
-        implementation.</p>
-    <p>We will first implement fluid simulation based on the Lattice-Boltzmann equations and create a webpage where a
-        user can interact with the simulation. We will then implement a version based on the Navier-Stokes equations,
-        and add that to the webpage. This will let us do a comparative analysis between the methods, and we can
-        summarize the differences in ease of implementation, performance, and visual quality.</p>
-    <p>Our presentation will focus on their technical differences as well as the different applications for which they
-        are suited.</p>
 
     <h2>References</h2>
     <ul>
@@ -126,66 +153,6 @@ While simulation is running:
                 target="_blank">Comparison of lattice-boltzmann and navier-stokes</a></li>
     </ul>
 
-    <h2>Timeline</h2>
-    <table border="1" cellpadding="10" cellspacing="0">
-        <thead>
-            <tr>
-                <th>Week and Date</th>
-                <th>Description</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td><strong>Week 5 (9/24 - 9/26)</strong></td>
-                <td>Set up project and research equations/algorithms</td>
-            </tr>
-            <tr>
-                <td><strong>Week 6 (10/1 - 10/3)</strong></td>
-                <td>Present Overview, Finish setup for project and make plan for implementation details</td>
-            </tr>
-            <tr>
-                <td><strong>Week 7 (10/8 - 10/10)</strong></td>
-                <td>Start coding Lattice-Boltzmann fluid sim</td>
-            </tr>
-            <tr>
-                <td><strong>Week 8 (10/17)</strong></td>
-                <td>Finish coding Lattice-Boltzmann fluid sim and test on webpage</td>
-            </tr>
-            <tr>
-                <td><strong>Week 9 (10/22 - 10/24)</strong></td>
-                <td>Start coding Navier-Stokes fluid sim</td>
-            </tr>
-            <tr>
-                <td><strong>Week 10 (10/29 - 10/31)</strong></td>
-                <td>Present Progress (10 min)</td>
-            </tr>
-            <tr>
-                <td><strong>Week 11 (11/5 - 11/7)</strong></td>
-                <td>Continue coding Navier-Stokes fluid sim</td>
-            </tr>
-            <tr>
-                <td><strong>Week 12 (11/12 - 11/14)</strong></td>
-                <td>Finish coding Navier-Stokes fluid sim</td>
-            </tr>
-            <tr>
-                <td><strong>Week 13 (11/19 - 11/21)</strong></td>
-                <td>Analysis and writeup for webpage</td>
-            </tr>
-            <tr>
-                <td><strong>Week 14 (11/26)</strong></td>
-                <td>Final Presentation (10 min), Analysis and writeup for webpage</td>
-            </tr>
-            <tr>
-                <td><strong>Week 15 (12/3 - 12/5)</strong></td>
-                <td>Present Final, Make presentation and present</td>
-            </tr>
-        </tbody>
-    </table>
-
-
-    <p>We suspect from our research that Navier-Stokes will take us longer to code, so we will try to start and finish
-        Lattice-Boltzmann as early as possible (week 6 if we can finish the setup and research early enough). If we end
-        up having more time towards the end, we will add tools to manipulate the fluid sims.</p>
 </body>
 
 </html>
