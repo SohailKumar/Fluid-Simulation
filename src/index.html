@@ -54,6 +54,7 @@
     </section>
     <section id="project-description">
         <h1>Fluid Simulation</h1>
+        <hr>
         <section id="background-information">
             <h2>Background Information</h2>
             <p class="background-text">
@@ -66,7 +67,7 @@
             </p>
         </section>
 
-
+        <hr>
         <section>
             <h2>Problem Domain</h2>
             <p>The importance of finding an optimal solution depends on the application:</p>
@@ -82,7 +83,20 @@
                 creative domains like entertainment.</p>
         </section>
 
+        <hr>
+        <section>
+            <h2>Related Projects</h2>
+            <p> There are many fluid simulations based on the Navier-Stokes equations, each employing
+                different methods of approximation. For our non-shader implementation, we referenced a
+                Python-based Lattice Boltzmann Method (LBM) from the repository <a href="https://github.com/pmocz/latticeboltzmann-python">pmocz/latticeboltzmann-python</a>.
+                While we couldn't find LBM-specific shader implementations, we drew inspiration for our visual
+                setup and general structure from shader-based fluid simulations that use other approximations,
+                specifically <a href="https://github.com/mharrys/fluids-2d/tree/master">Fluids-2d by mharrys</a> and <a href="https://github.com/PavelDoGreat/WebGL-Fluid-Simulation"></a>WebGL-Fluid-Simulation by PavelDoGreat</a>. Both of these 
+                projects utilize multiple shaders in sequence to simulate fluid motion effectively which is 
+                what we attempted to implement in our shader algorithm too.</p>
+        </section>
 
+        <hr>
         <section>
             <h2>Inputs and Outputs</h2>
             <h3>Inputs</h3>
@@ -108,8 +122,9 @@
             </ul>
         </section>
 
+        <hr>
         <section id="algorithm-description">
-            <h2>Algorithm Description</h2>
+            <h2>Non-Shader Algorithm Description</h2>
             <h3 id="overview">Overview</h3>
             <p>While simulation is running:</p>
             <ul>
@@ -120,7 +135,7 @@
                 <li><a href="#render">Render the updated fluid field using Three.js</a></li>
             </ul>
 
-            <h3 id="initialization">Initialization</h3>
+            <h3 id="initialization">1. Initialization</h3>
             <p>Initialize lattice grid with dimensions NxM</p>
             <p>For each cell in the grid:</p>
             <ul>
@@ -132,7 +147,7 @@
             <p>Define lattice velocity vectors (9 directions for D2Q9 model)</p>
             <p>Time complexity of this step: O(NxMx9)=O(NxM)</p>
 
-            <h3 id="collision-step">Collision Step</h3>
+            <h3 id="collision-step">2. Collision Step</h3>
             <p>For each cell in the grid:</p>
             <ul>
                 <li>Compute macroscopic density (rho) and velocity (u) from the distribution functions</li>
@@ -148,7 +163,7 @@
             <p>Time complexity of this step: O(NxMx9)=O(NxM)</p>
 
 
-            <h3 id="streaming">Streaming</h3>
+            <h3 id="streaming">3. Streaming</h3>
             <p>For each cell in the grid:</p>
             <ul>
                 <li>For each velocity direction:
@@ -159,7 +174,7 @@
             </ul>
             <p>Time complexity of this step: O(NxMx9)=O(NxM)</p>
 
-            <h3 id="handle-boundaries">Handle Boundaries</h3>
+            <h3 id="handle-boundaries">4. Handle Boundaries</h3>
             <p>For each boundary cell (could be entire grid):</p>
             <ul>
                 <li>Apply no-slip boundary conditions:
@@ -175,14 +190,14 @@
             </ul>
             <p>Time complexity of this step: O(NxM), worst case is that entire grid is covered in objects.</p>
 
-            <h3 id="update-macroscopic">Update Macroscopic Cell Variables</h3>
+            <h3 id="update-macroscopic">5. Update Macroscopic Cell Variables</h3>
             <p>For each cell in the grid:</p>
             <ul>
                 <li>Compute macroscopic velocity and density from the new distribution functions</li>
             </ul>
             <p>Time complexity of this step: O(NxM)</p>
 
-            <h3 id="render">Render</h3>
+            <h3 id="render">6. Render</h3>
             <p>For each cell in the grid:</p>
             <ul>
                 <li>Compute the color or size of a particle based on the density or velocity magnitude</li>
@@ -192,7 +207,7 @@
             <p>Time complexity of this step: O(NxM)</p>
         </section>
 
-
+        <hr>
         <section>
             <h2>Time Complexity Analysis - Non-shader algorithm</h2>
             <ul>
@@ -206,6 +221,7 @@
                 handling is typically a minor contribution.</p>
         </section>
 
+        <hr>
         <section>
             <h2>Runtime Analysis <em>(no shaders)</em></h2>
             <table border="1px">
@@ -248,7 +264,7 @@
 
     </section>
 
-
+    <hr>
     <h2>References</h2>
     <ul>
         <li><a href="https://en.wikipedia.org/wiki/Navier%E2%80%93Stokes_equations" target="_blank">Navier-Stokes</a>
