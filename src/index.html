@@ -11,7 +11,25 @@
 
 <body>
     <script src="./main.js" type="module"></script>
-    <section>
+    <section id="project-intro">
+        <h1>Fluid Simulation</h1>
+        <em>Jack McLaughlin and Sol Kumar</em>
+            <p>Here is a link to a video explaining our project: <a href="https://youtu.be/6non9Y1Lc0w"target="_blank">Fluid Simulation - Lattice-Boltzmann - csci 716 compgeo</a> </p>
+            
+        <hr>
+        <section id="background-information">
+            <h2>Background Information</h2>
+            <p class="background-text">
+                The Lattice Boltzmann Method (LBM) is a numerical approach used for simulating fluid dynamics. It
+                operates on a discretized lattice grid where each cell holds values for fluid density and velocity
+                distributions. LBM differs from traditional computational fluid dynamics (CFD) methods, as it models the
+                microscopic particle interactions rather than directly solving macroscopic fluid equations. By doing so,
+                LBM is particularly well-suited for simulating complex fluid behavior and is efficiently parallelizable,
+                making it a popular choice for GPU-based simulations.
+            </p>
+        </section>
+    </section>
+    <section id="simSection">
         <h1>Live Simulation <em>(no shaders)</em></h1>
         <div>
             <em id="gridSize">--</em>
@@ -53,19 +71,7 @@
         </div>
     </section>
     <section id="project-description">
-        <h1>Fluid Simulation</h1>
-        <hr>
-        <section id="background-information">
-            <h2>Background Information</h2>
-            <p class="background-text">
-                The Lattice Boltzmann Method (LBM) is a numerical approach used for simulating fluid dynamics. It
-                operates on a discretized lattice grid where each cell holds values for fluid density and velocity
-                distributions. LBM differs from traditional computational fluid dynamics (CFD) methods, as it models the
-                microscopic particle interactions rather than directly solving macroscopic fluid equations. By doing so,
-                LBM is particularly well-suited for simulating complex fluid behavior and is efficiently parallelizable,
-                making it a popular choice for GPU-based simulations.
-            </p>
-        </section>
+        
 
         <hr>
         <section>
