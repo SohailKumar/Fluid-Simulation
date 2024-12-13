@@ -126,6 +126,7 @@
         </section>
 
         <section id="math">
+            <hr>
             <h2>Mathematical Background</h2>
             <p>The lattice Boltzmann method (LBM) is a numerical method used to simulate fluid dynamics. It is based on
                 the kinetic theory of fluids and describes the evolution of distribution functions of particles in a
@@ -231,6 +232,94 @@
                 <li>Render the scene using Three.js</li>
             </ul>
             <p>Time complexity of this step: O(NxM)</p>
+            
+            <hr>
+            <h2>Shader Algorithm Description (Theoretical)</h2>
+            <h3 id="overview">Overview</h3>
+            <ol>
+                <li><a href="#shaderInit">Initialization</a></li>
+                <li><a href="#shaderRender">Perform Simulation</a></li>
+                <li><a href="#issues">Implementation Issues</a></li>
+            </ol>
+
+            <h3 id="shaderInit">1. Initialization</h3>
+
+            <h4>Set Up Three.js World</h4>
+            <ul>
+                <li>Set up <strong>renderer</strong>, <strong>orthographic camera</strong>, and <strong>plane geometry</strong>.</li>
+                <li>Set up scenes, materials, and mesh for both the <em>display scene</em> and the <em>buffer scene</em>.</li>
+            </ul>
+
+            <h4>Create Textures</h4>
+            <ul>
+                <li>Create two sets of three textures of size: <code>resolution x resolution</code>.</li>
+                <li>Use two sets to ensure one set is written to while the other is read. Assume the one to be read is currentTextures and the other nextTextuers</li>
+                (In practicality, for ThreeJS, this should be accomplished using two WebGLRenderTargets with 3 textures in each)
+                <li>Each texture can hold up to 4 values (<code>r, g, b, a</code>).</li>
+            </ul>
+
+            <h4>Texture Data Allocation</h4>
+            <ul>
+                <li><strong>First Texture:</strong> RGB channels hold distribution functions for particles moving <em>North-West</em>, <em>North</em>, and <em>North-East</em>.</li>
+                <li><strong>Second Texture:</strong> RGB channels hold distribution functions for particles moving <em>West</em>, <em>East</em>, or standing still.</li>
+                <li><strong>Third Texture:</strong> RGB channels hold distribution functions for particles moving <em>South-West</em>, <em>South</em>, and <em>South-East</em>.</li>
+            </ul>
+
+            <p>Initialize one set of textures with starting values for the simulation.</p>
+
+            <h4>Load Shaders</h4>
+            <ul>
+
+            <li><h5>Boundary Shader</h5></li>
+            <ul>
+            <li>
+                For pixels at the edge of the screen, move the distribution functions to the opposite boundary. For example, if a pixel faces a border to the <strong>North</strong>, take the distribution functions from the <em>North-West</em>, <em>North</em>, and <em>North-East</em> directions and add them to the <em>South-West</em>, <em>South</em>, and <em>South-East</em> directions.
+            </li>
+            <li>Set the Northern values to 0 so particles no longer move in that direction.</li>
+            </ul>
+
+            <li><h5>Collision Shader</h5></li>
+            <ul>
+            <li>Calculate the values of all 9 distribution functions and set them.</li>
+            </ul>
+
+            <li><h5>Streaming Shader</h5></li>
+            <ul>
+            <li>Move the distribution functions in their respective directions. For example, set the value at the <em>North</em> direction of one pixel to the <em>North</em> direction value at the pixel directly above it.</li>
+            </ul>
+
+            <li><h5>Visualization Shader</h5></li>
+            <ul>
+            <li>Take the values of all three textures and determine the color to display. The output is one texture that can be displayed on top of the plane.</li>
+            </ul>
+
+            </ul>
+
+            <h3 id="shaderRender">2. Simulate</h3>
+            <ol>
+                <li>Run each shader in sequence.</li>
+                <li>For each shader:
+                    <ul>
+                        <li>Set the material for the buffer mesh to the shader currently being run.</li>
+                        <li>Set material textures to currentTextures (the ones to be read).</li>
+                        <li>Render the buffer scene to run the shader and obtain new texture values.</li>
+                        <li>Store the new values in nextTextures.</li>
+                        (With WebGLRenderTargets, the last two steps combine into one)
+                        <li>Swap currentTextures and nextTextures so the new textures to be read by the next shader are in the currentTextures variable.</li>
+                    </ul>
+                </li>
+                <li>Finally, set the display mesh’s texture to the meaningful texture(with colors) from the visualization shader.</li>
+            </ol>
+                 
+            <h3 id="implementation">(Implementation Issues)</h3>
+            <h4>Background Information about ThreeJS and Rendertargets:</h4>
+            Rendertargets essentially allow you to draw pixels in an off-screen buffer and are rendered in the background.
+            These are used to run shaders in the background before visualization, speeding up processing time as well as allowing us to have multiple textures to read from and write to.
+            <h4>Issue:</h4>
+            In previous years, Shaders in ThreeJS were able to output to multiple textures using THREE.WebGLMultipleRenderTargets to set up multiple targets for the shader. However, in February/March of 2024, this function was deprecated.
+            The new method of implementing multiple render targets involves setting the count in the THREE.WebGLRenderTargets function. However, we were unable to successfully utilize this method with our shaders.
+            
+
         </section>
 
         <hr>
@@ -245,6 +334,44 @@
             </ul>
             <p>The overall complexity for a single timestep is dominated by <code>O(N &times; M)</code>, as boundary
                 handling is typically a minor contribution.</p>
+
+
+            <h2>Time Complexity Analysis - Shader algorithm</h2>
+
+            <h3>Initialization</h3>
+            <p>
+                This step has the greatest cost in terms of time complexity. You need to set up <span class="highlight">6 textures</span> of size <code>N</code>, resulting in a complexity of:
+            </p>
+            <p><code>6 × O(N<sup>2</sup>)</code></p>
+            <p>
+                Additionally, setting up the other <strong>Three.js world objects</strong> and scenes introduces its own time requirements. 
+            </p>
+        
+            <h3>Simulation</h3>
+            <p>
+                Unlike the non-shader algorithm, the shader algorithm can run calculations for each pixel in <strong>parallel</strong>. This is achieved by utilizing the user's <strong>GPU</strong>, meaning performance depends on:
+            </p>
+            <ul>
+                <li>The computational power of the user’s GPU.</li>
+                <li>The chosen resolution for the textures.</li>
+            </ul>
+        
+            <p>
+                Assuming the GPU can process the entire texture in parallel (which is realistic for most modern GPUs and textures up to <code>1024 × 1024</code>), each shader runs in:
+            </p>
+            <p><code>O(1)</code></p>
+            <p>
+                Consequently, running all the shaders at each time step also has a complexity of <code>O(1)</code>.
+            </p>
+        
+            <h3>Overall Time Complexity</h3>
+            <p>
+                Therefore, the overall time complexity is approximately:
+            </p>
+            <ul>
+                <li><strong>Setup:</strong> <code>O(N<sup>2</sup>)</code></li>
+                <li><strong>Simulation:</strong> <code>T × O(1) = O(T)</code>, where <code>T</code> is the number of timesteps.</li>
+            </ul>
         </section>
 
         <hr>
