@@ -7,7 +7,20 @@ body {
     flex-direction: row;  /* Arrange children side by side */
     justify-content: flex-start;  /* Align items to the left */
     align-items: flex-start;  /* Align items at the top */
+    width: 100%;  /* Ensure outer container takes full width */
+}
 
+#canvasContainer {
+    position: relative;  /* Ensure canvas positioning works properly */
+    
+}
+
+#controls {
+    width: 50%;  /* Allocate 30% of the space for the controls */
+    padding: 20px;  /* Optional: Space inside the controls */
+    background-color: #f0f0f0;  /* Optional: Background color for contrast */
+    box-sizing: border-box;  /* Ensure padding is included in width */
+    overflow: auto;  /* Ensure content doesn't overflow if too large */
 }
 
 #controls {

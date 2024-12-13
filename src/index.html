@@ -36,22 +36,30 @@
         </div>
         <div id="outerSim">
 
-            <div id="canvasContainer" style="position: static;">
+            <div id="canvasContainer" >
                 <canvas id="fluidCanvas" style="position: absolute;"></canvas>
                 <canvas id="UICanvas" style="position: absolute;"></canvas>
             </div>
             <div id="controls">
                 <div class="control-container">
                     <label style="display: block;" for="gridResolution">Grid Resolution (Side Length): </label>
-                    <input type="range" id="gridResolution" min="1" max="200" value="50">
-                    <span id="gridResolutionValue">50</span>
+                    <input type="range" id="gridResolution" min="1" max="200" value="100">
+                    <span id="gridResolutionValue">100</span>
                 </div>
 
                 <div class="control-container">
                     <label style="display: block;" for="totalTimestamps">Total Timestamps: </label>
-                    <input type="range" id="totalTimestamps" min="1" max="1000" value="100">
-                    <span id="totalTimestampsValue">100</span>
+                    <input type="range" id="totalTimestamps" min="1" max="1000" value="500">
+                    <span id="totalTimestampsValue">500</span>
                 </div>
+
+                <div class="control-container">
+                    <label style="display: block;" for="tauSlider">Tau (viscosity): </label>
+                    <input type="range" id="tauSlider" min="0" max="2.5" value="1.8" step="0.1">
+                    <span id="tauSliderValue">1.8</span>
+                </div>
+
+                <p>The cells are colored from blue to white based on their velocity where blue is 0 and white is the highest velocity value present.</p>
             </div>
         </div>
         <div>

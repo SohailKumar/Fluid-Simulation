@@ -20,14 +20,19 @@ const gridResolutionSlider = document.getElementById('gridResolution');
 const totalTimestampsSlider = document.getElementById('totalTimestamps');
 const gridResolutionValueDisplay = document.getElementById('gridResolutionValue');
 const totalTimestampsValueDisplay = document.getElementById('totalTimestampsValue');
+const tauSlider = document.getElementById('tauSlider');
+const tauDisplay = document.getElementById('tauSliderValue')
 
+const defaultTau = 1.8
+const defaultGrid = 100
+const defaultNt = 500
 
 // Simulation parameters
-let Nx = Ny = 50; // resolution x-dir, y-dir
+let Nx = Ny = 100; // resolution x-dir, y-dir
 
 const rho0 = 100; // average density
-const tau = 1.8; // collision timescale
-let Nt = 100; // number of timesteps. simulation will take Nt * SIM_INT / 1000 seconds
+let tau = 1.8; // collision timescale
+let Nt = 500; // number of timesteps. simulation will take Nt * SIM_INT / 1000 seconds
 
 const randSeed = 123
 
@@ -40,12 +45,7 @@ const weights = [4 / 9, 1 / 9, 1 / 36, 1 / 9, 1 / 36, 1 / 9, 1 / 36, 1 / 9, 1 / 
 
 // Update the grid resolution and display value when slider changes
 gridResolutionSlider.addEventListener('change', () => {
-    gridResolution = gridResolutionSlider.value;
-    gridResolutionValueDisplay.textContent = gridResolution;
-    Ny = Nx = parseInt(gridResolution)
-    // You can use the value here to update your fluid simulation
-    console.log('Grid Resolution:', Ny);
-    gridSizeText.textContent = `${Ny}x${Nx} grid`
+    updateGridRez()
     resetTexture()
     reset()
 });
@@ -53,18 +53,57 @@ gridResolutionSlider.addEventListener('input', () => {
     gridResolutionValueDisplay.textContent = gridResolutionSlider.value;
 });
 
+function updateGridRez(defaults) {
+    let gridres = gridResolutionSlider.value;
+    if (defaults) gridres = defaultGrid
+    gridResolutionValueDisplay.textContent = gridres;
+    Ny = Nx = parseInt(gridres)
+    // You can use the value here to update your fluid simulation
+
+    gridSizeText.textContent = `${Ny}x${Nx} grid`
+    gridResolutionValueDisplay.textContent = gridres;
+
+}
+
 // Update the total timestamps and display value when slider changes
 totalTimestampsSlider.addEventListener('change', () => {
-    totalTimestamps = totalTimestampsSlider.value;
-    totalTimestampsValueDisplay.textContent = totalTimestamps;
-    Nt = parseInt(totalTimestamps)
-    // You can use the value here to update your fluid simulation
-    console.log('Total Timestamps:', Nt);
+    updateNT()
     reset()
 });
 totalTimestampsSlider.addEventListener('input', () => {
     totalTimestampsValueDisplay.textContent = totalTimestampsSlider.value;
 });
+
+function updateNT(defaults) {
+    let newTS = totalTimestampsSlider.value;
+    if (defaults) newTS = defaultNt
+    totalTimestampsValueDisplay.textContent = newTS;
+    Nt = parseInt(newTS)
+    // You can use the value here to update your fluid simulation
+
+    totalTimestampsValueDisplay.textContent = newTS;
+
+}
+
+// Update the total timestamps and display value when slider changes
+tauSlider.addEventListener('change', () => {
+    updateTau()
+    reset()
+});
+tauSlider.addEventListener('input', () => {
+    tauDisplay.textContent = tauSlider.value;
+});
+
+function updateTau(defaults) {
+    let newtau = tauSlider.value;
+    if (defaults) newtau = defaultTau
+    tauDisplay.textContent = newtau;
+    tau = parseInt(newtau)
+    // You can use the value here to update your fluid simulation
+    console.log(newtau)
+    tauDisplay.textContent = newtau;
+
+}
 
 // Initialize simulation variables
 // console.log("inits:",ones.toString(), rand.toString())
@@ -149,6 +188,12 @@ let intervalId = -1
 
 let isPaused = true;
 
+function toggleControlsDisabled(disable) {
+    gridResolutionSlider.disabled = disable
+    totalTimestampsSlider.disabled = disable
+    tauSlider.disabled = disable
+}
+
 startButton.addEventListener('click', () => {
     start()
 });
@@ -156,8 +201,7 @@ function start() {
     isPaused = false;
     startButton.disabled = true
     pauseButton.disabled = false
-    gridResolutionSlider.disabled = true
-    totalTimestampsSlider.disabled = true
+    toggleControlsDisabled(true)
     if (debug) console.log("paused", isPaused)
     simulate(Nt)
 }
@@ -174,18 +218,18 @@ function pause() {
 }
 
 resetButton.addEventListener('click', () => {
-    reset()
+    reset(true)
 });
-function reset() {
+function reset(defaultControls=false) {
+    if (defaultControls) setControlsDefault()
     if (intervalId > -1) clearInterval(intervalId)
     updateStep(0)
     isPaused = true
     pauseButton.disabled = true
     startButton.disabled = false
-    gridResolutionSlider.disabled = false
-    totalTimestampsSlider.disabled = false
+    toggleControlsDisabled(false)
     performanceDisp.textContent = "Average time per step (over last 100 steps): -- ms"
-    
+
     F.dispose()
     objectMask.dispose()
     F = resetF()
@@ -194,6 +238,14 @@ function reset() {
     //console.log(F.toString(), objectMaskArr)
     initialize_sim()
     renderer.render(scene, camera);
+}
+function setControlsDefault() {
+    gridResolutionSlider.value = defaultGrid
+    updateGridRez(true)
+    totalTimestampsSlider.value = defaultNt
+    updateTau(true)
+    tauSlider.value = defaultTau
+    updateNT(true)
 }
 
 advanceButton.addEventListener('click', async () => {
@@ -330,7 +382,7 @@ const plane = new THREE.Mesh(planeGeometry, planeMaterial);
 scene.add(plane);
 renderer.render(scene, camera);
 
-function resetTexture(){
+function resetTexture() {
     textureData = new Uint8Array(Nx * Ny * 4); // RGBA
 
     texture = new THREE.DataTexture(textureData, Nx, Ny, THREE.RGBAFormat)
