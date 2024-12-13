@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import * as tf from '@tensorflow/tfjs';
 
 //DEBUG FLAG
-const debug = true;
+const debug = false;
 
 const initial_noise_flag = true
 
@@ -70,7 +70,7 @@ totalTimestampsSlider.addEventListener('input', () => {
 let F = resetF()
 
 function resetF() {
-    console.log(Ny,Nx,NL)
+    // console.log(Ny, Nx, NL)
     return tf.tidy(() => { return tf.ones([Ny, Nx, NL]).add(tf.randomNormal([Ny, Nx, NL], 0, 0.01, 'float32', randSeed)) });
 }
 
@@ -121,7 +121,7 @@ let runtimes = Array(RUNTIME_INTERVAL).fill(0)
 let avgRuntimes = []
 
 const memInd = document.getElementById('memInd');
-function updateMemInd(){
+function updateMemInd() {
     let msg = `Memory Usage: ${(tf.memory().numBytes / 1024).toFixed(2)}  KB`
     console.log(msg)
     memInd.textContent = msg
@@ -129,7 +129,7 @@ function updateMemInd(){
 
 const stepCounter = document.getElementById('stepCounter');
 stepCounter.textContent = `Step ${step} / ${Nt}`
-function updateStep(val){
+function updateStep(val) {
     step = val
     stepCounter.textContent = `Step ${step} / ${Nt}`;
 }
@@ -176,7 +176,7 @@ resetButton.addEventListener('click', () => {
     reset()
 });
 function reset() {
-    if (intervalId>-1) clearInterval(intervalId)
+    if (intervalId > -1) clearInterval(intervalId)
     updateStep(0)
     isPaused = true
     pauseButton.disabled = true
@@ -184,6 +184,7 @@ function reset() {
     gridResolutionSlider.disabled = false
     totalTimestampsSlider.disabled = false
     performanceDisp.textContent = "Average time per step (over last 100 steps): -- ms"
+    resetTexture()
     F.dispose()
     objectMask.dispose()
     F = resetF()
@@ -328,6 +329,19 @@ const plane = new THREE.Mesh(planeGeometry, planeMaterial);
 scene.add(plane);
 renderer.render(scene, camera);
 
+function resetTexture(){
+    textureData = new Uint8Array(Nx * Ny * 4); // RGBA
+
+    texture = new THREE.DataTexture(textureData, Nx, Ny, THREE.RGBAFormat)
+    texture.needsUpdate = true
+    const planeGeometry = new THREE.PlaneGeometry(2, 2);
+    const planeMaterial = new THREE.MeshBasicMaterial({ map: texture });
+    const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+    // scene.background = new THREE.Color(0x808080); // Set background to gray
+    scene.add(plane);
+    renderer.render(scene, camera);
+}
+
 
 // SIMULATION INITIALIZATION
 
@@ -364,7 +378,7 @@ function initialize_sim() {
     if (debug) console.log(ux.toString(), uy.toString())
     if (VISUALIZATION_MODE === "velocity") {
         visualArr = getNormalizedVel(ux, uy)
-        
+
         visualize()
     } else if (VISUALIZATION_MODE === "vorticity") {
         visualArr = getNormalizedVorticity(ux, uy)
@@ -372,7 +386,7 @@ function initialize_sim() {
     }
 
     tf.dispose([rho, ux, uy])
-    console.log(objectMaskArr)
+    // console.log(objectMaskArr)
     updateMemInd()
 }
 
@@ -428,7 +442,7 @@ function collisonAddObject(newObjectMask) {
         console.log("New Object Mask: ", objectMaskArr)
     }
 
-    tf.dispose([newObjectMask,temp])
+    tf.dispose([newObjectMask, temp])
 }
 
 function createCylinderMask(centerX, centerY, radius) {
@@ -611,7 +625,7 @@ async function updateSimulation(step) {
     const exTime = performance.now() - startTime
     if (step % RUNTIME_INTERVAL === 0) {
         updatePerfDisp()
-        
+
         updateMemInd()
     }
     runtimes[step % RUNTIME_INTERVAL] = exTime
@@ -690,7 +704,7 @@ function visualize() {
 
     // console.log("visualization values:", visualArr)
     if (debug) console.log("objects", objectMaskArr)
-    console.log(Ny,Nx)
+    // console.log(Ny, Nx)
     for (let y = 0; y < Ny; y++) {
         for (let x = 0; x < Nx; x++) {
 
