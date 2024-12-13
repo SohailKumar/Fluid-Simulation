@@ -28,7 +28,8 @@ const defaultGrid = 100
 const defaultNt = 500
 
 // Simulation parameters
-let Nx = Ny = 100; // resolution x-dir, y-dir
+let Nx = 100
+let Ny = 100; // resolution x-dir, y-dir
 
 const rho0 = 100; // average density
 let tau = 1.8; // collision timescale
@@ -57,12 +58,13 @@ function updateGridRez(defaults) {
     let gridres = gridResolutionSlider.value;
     if (defaults) gridres = defaultGrid
     gridResolutionValueDisplay.textContent = gridres;
-    Ny = Nx = parseInt(gridres)
+    Ny = parseInt(gridres)
+    Nx = parseInt(gridres)
     // You can use the value here to update your fluid simulation
 
     gridSizeText.textContent = `${Ny}x${Nx} grid`
     gridResolutionValueDisplay.textContent = gridres;
-
+    
 }
 
 // Update the total timestamps and display value when slider changes
@@ -221,15 +223,15 @@ resetButton.addEventListener('click', () => {
     reset(true)
 });
 function reset(defaultControls=false) {
-    if (defaultControls) setControlsDefault()
     if (intervalId > -1) clearInterval(intervalId)
-    updateStep(0)
+        updateStep(0)
     isPaused = true
     pauseButton.disabled = true
     startButton.disabled = false
     toggleControlsDisabled(false)
     performanceDisp.textContent = "Average time per step (over last 100 steps): -- ms"
-
+    
+    if (defaultControls) setControlsDefault()
     F.dispose()
     objectMask.dispose()
     F = resetF()
@@ -246,6 +248,7 @@ function setControlsDefault() {
     updateTau(true)
     tauSlider.value = defaultTau
     updateNT(true)
+    resetTexture()
 }
 
 advanceButton.addEventListener('click', async () => {
@@ -392,6 +395,7 @@ function resetTexture() {
     const plane = new THREE.Mesh(planeGeometry, planeMaterial);
     // scene.background = new THREE.Color(0x808080); // Set background to gray
     scene.add(plane);
+    console.log(textureData)
     renderer.render(scene, camera);
 }
 
